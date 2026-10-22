@@ -1,0 +1,320 @@
+import { useMemo, useState, useEffect } from 'react';
+import { api } from '../api/client.js';
+import {
+  KpiTrend, Card, Loading, ErrorBox, Tabs,
+  LineChartInteractive, RankList, MiniMonthBars, Funnel, BarsInteractive, DonutMulti, CAT_COLORS,
+  IconDownload, IconCalendar, IconLightbulb, IconUsers, IconTrendingUp, IconStar, IconGift, IconWallet,
+} from '../components/ui.jsx';
+
+const RANGES = ['7d', '30d', '90d', '12m'];
+const RANGE_LABEL_TEXT = {
+  es: { '7d': 'Últimos 7 días', '30d': 'Últimos 30 días', '90d': 'Últimos 90 días', '12m': 'Últimos 12 meses' },
+  en: { '7d': 'Last 7 days', '30d': 'Last 30 days', '90d': 'Last 90 days', '12m': 'Last 12 months' },
+};
+const RANGE_PILL_KEY = { '7d': 'com_range_7d', '30d': 'com_range_30d', '90d': 'com_range_90d', '12m': 'com_range_12m' };
+const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90, '12m': 365 };
+
+function dateRangeLabel(range, locale) {
+  const end = new Date();
+  const start = new Date(end.getTime() - RANGE_DAYS[range] * 86400000);
+  const fmt = (d) => d.toLocaleDateString(locale, { day: '2-digit', month: 'short' });
+  const year = end.getFullYear();
+  return `${fmt(start)} – ${fmt(end)} ${year}`;
+}
+
+function downloadCommercialCsv(d, range, isEn) {
+  const rows = [];
+  rows.push([isEn ? 'Metric' : 'Métrica', isEn ? 'Value' : 'Valor']);
+  rows.push([isEn ? 'Range' : 'Rango', RANGE_LABEL_TEXT[isEn ? 'en' : 'es'][range]]);
+  rows.push([isEn ? 'Downloads' : 'Descargas', d.downloads]);
+  rows.push(['DAU', d.dau]);
+  rows.push(['MAU', d.mau]);
+  rows.push([isEn ? 'Converted' : 'Convertidos', d.converted]);
+  rows.push([isEn ? 'Conversion rate' : 'Tasa de conversión', `${d.convRate}%`]);
+  rows.push(['MRR', d.mrr]);
+  rows.push([isEn ? 'Benefits redeemed' : 'Beneficios canjeados', d.benefitsRedeemed]);
+  rows.push([]);
+  rows.push([isEn ? 'Funnel step' : 'Paso del embudo', isEn ? 'Value' : 'Valor']);
+  for (const f of d.funnel || []) rows.push([f.label, f.value]);
+  rows.push([]);
+  rows.push([isEn ? 'Revenue by plan' : 'Recaudación por plan', isEn ? 'Value' : 'Valor']);
+  for (const p of d.revenueByPlan || []) rows.push([p.plan, p.value]);
+  rows.push([]);
+  rows.push([isEn ? 'Badges by tier' : 'Badges por tipo', isEn ? 'Value' : 'Valor']);
+  for (const b of d.badgesByType || []) rows.push([b.tier, b.value]);
+
+  const escapeCell = (cell) => {
+    const s = String(cell ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = rows.map((row) => row.map(escapeCell).join(',')).join('\r\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `metricas_comerciales_${range}_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+const PLAN_LABEL = { uni: { es: '1 prueba', en: 'One test' }, all: { es: 'Todas las pruebas', en: 'All tests' } };
+
+export default function Commercial({ ctx }) {
+  const { L, fmt } = ctx;
+  const isEn = ctx.lang === 'en' || (typeof L === 'function' && L('mo') === '/mo');
+  const locale = isEn ? 'en-US' : 'es-CL';
+  const [range, setRange] = useState('30d');
+  const [tab, setTab] = useState('resumen');
+  const [d, setD] = useState(null);
+  const [ov, setOv] = useState(null);
+  const [err, setErr] = useState(null);
+  const [embudoView, setEmbudoView] = useState('steps');
+
+  const load = async (r) => {
+    setErr(null);
+    try {
+      const [c, o] = await Promise.all([api.get(`/metrics/commercial?range=${r}`), api.get('/metrics/overview')]);
+      setD(c.data); setOv(o.data);
+    } catch (e) { setErr(e.message); }
+  };
+  useEffect(() => { load(range); }, [range]);
+
+  const months = ov?.downloadsByMonth || [];
+  const monthVals = useMemo(() => months.map((m) => m.value), [months]);
+  const monthLabels = useMemo(() => months.map((m) => m.month), [months]);
+
+  const revBars = useMemo(() => (d?.revenueByPlan || []).map((r, i) => ({
+    label: PLAN_LABEL[r.plan]?.[isEn ? 'en' : 'es'] || r.plan,
+    value: r.value, color: CAT_COLORS[i % CAT_COLORS.length], disp: '$' + fmt(r.value),
+  })), [d, isEn, fmt]);
+
+  // Sin el emoji de medalla en el label: dentro del <text> del gráfico SVG se
+  // veía mal (tipografía de emoji del SO, sin el tratamiento currentColor). El
+  // color de la barra ya identifica el tier (var(--bronze|silver|gold|...)).
+  const badgeBars = useMemo(() => (d?.badgesByType || []).map((b) => ({
+    label: L('tier_' + b.tier), value: b.value, disp: fmt(b.value), color: `var(--${b.tier})`,
+  })), [d, L, fmt]);
+
+  if (err) return <Card><ErrorBox msg={err} onRetry={() => load(range)} L={L} /></Card>;
+  if (!d || !ov) return <Loading L={L} />;
+
+  const notConverted = Math.max((d.mau || 0) - (d.converted || 0), 0);
+
+  const TABS = [
+    { id: 'resumen', label: L('com_tab_resumen') },
+    { id: 'adquisicion', label: L('com_tab_adq') },
+    { id: 'conversion', label: L('com_tab_conv') },
+    { id: 'ingresos', label: L('com_tab_ing') },
+  ];
+
+  return (
+    <>
+      {/* com-toolbar: en escritorio todo va en una sola fila (pills, fecha y
+          exportar). En teléfono se parte en dos filas — pills arriba, fecha +
+          exportar abajo uno al lado del otro — en vez de que el botón
+          "Exportar CSV" se vaya envuelto más abajo suelto (ver
+          .com-toolbar/.com-toolbar-row2 en styles.css). */}
+      <div className="com-toolbar commercial-layout-1" >
+        <div className="range-pills">
+          {RANGES.map((rg) => (
+            <button key={rg} type="button" className={`range-pill ${range === rg ? 'act' : ''}`} onClick={() => setRange(rg)}>
+              {L(RANGE_PILL_KEY[rg])}
+            </button>
+          ))}
+        </div>
+        <div className="com-toolbar-row2">
+          <span className="date-badge"><IconCalendar size={14} /> {dateRangeLabel(range, locale)}</span>
+          <button className="btn sec sm" onClick={() => downloadCommercialCsv(d, range, isEn)}>
+            <IconDownload size={14} /> {isEn ? 'Export CSV' : 'Exportar CSV'}
+          </button>
+        </div>
+      </div>
+
+      <Tabs tabs={TABS} active={tab} onChange={setTab} />
+
+      {tab === 'resumen' && (
+        <div className="com-layout tab-fade">
+          {/* Columna principal izquierda */}
+          <div className="commercial-layout-2" >
+            {/* Gráfico de descargas totales */}
+            <Card>
+              <b>{L('com_downloads_total')}</b>
+              <div className="com-dl-chart commercial-layout-3" >
+                <LineChartInteractive
+                  vals={monthVals}
+                  labels={monthLabels}
+                  format={(v) => fmt(v)}
+                />
+              </div>
+            </Card>
+
+            {/* Banner de tip insertado entre ambos bloques */}
+            <div className="tip-banner commercial-layout-4" >
+              <span className="ic"><IconLightbulb size={15} /></span>
+              <span className="commercial-layout-5" >{L('com_tip')}</span>
+              <span className="chev" aria-hidden="true">›</span>
+            </div>
+
+            {/* Fila con Recaudación mensual y Top planes */}
+            <div className="grid g2">
+              <Card className="mrr-card">
+                <b>{L('k_mrr')}</b>
+                {/* mrr-body: en escritorio el valor va arriba y las barras abajo
+                    (como antes). En teléfono pasa a fila — valor a la izquierda,
+                    gráfico angosto al costado — para que la tarjeta quede más
+                    baja en vez de alargada (ver .mrr-body en styles.css). */}
+                <div className="mrr-body">
+                  <div className="mrr-text">
+                    <div className="mrr-val">${fmt(d.mrr)}</div>
+                    {ov.mrr?.deltaPct != null && (
+                      <div className="dl up commercial-layout-6" >▲ {ov.mrr.deltaPct}% {L('vs_prev')}</div>
+                    )}
+                  </div>
+                  <div className="mrr-chart">
+                    <MiniMonthBars vals={monthVals} labels={monthLabels} />
+                  </div>
+                </div>
+              </Card>
+              <Card>
+                <div className="flex between commercial-layout-7" >
+                  <b>{L('com_top_plans')}</b>
+                  <span
+                    className="note link-action"
+                    onClick={() => setTab('ingresos')}
+                  >
+                    {L('com_see_all')} <span className="arw">→</span>
+                  </span>
+                </div>
+                <RankList data={revBars} />
+              </Card>
+            </div>
+          </div>
+
+          {/* Columna lateral derecha */}
+          <div className="com-side">
+            <KpiTrend label={L('k_downloads')} value={fmt(d.downloads)}
+              delta={ov.downloads?.deltaPct != null ? `${ov.downloads.deltaPct}% ${L('vs_prev')}` : null}
+              spark={monthVals} bigIcon={IconDownload} tone="blue" />
+            <KpiTrend label={L('k_dau')} value={fmt(d.dau)} spark={monthVals} bigIcon={IconUsers} tone="blue" />
+            <KpiTrend label={L('k_mau')} value={fmt(d.mau)}
+              delta={ov.mau?.deltaPct != null ? `${ov.mau.deltaPct}% ${L('vs_prev')}` : null}
+              spark={monthVals} bigIcon={IconTrendingUp} tone="blue" />
+            <KpiTrend label={L('k_converted')} value={`${fmt(d.converted)} · ${d.convRate}%`}
+              delta={`${d.convRate}% ${L('conv_of_mau')}`} spark={monthVals} bigIcon={IconStar} tone="blue" />
+
+            <Card>
+              <b>{L('com_plan_dist')}</b>
+              <DonutMulti data={revBars} centerLabel={`$${fmt(d.mrr)}`} />
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {tab === 'adquisicion' && (
+        <div className="tab-fade">
+          <div className="grid g4">
+            <KpiTrend label={L('k_downloads')} value={fmt(d.downloads)}
+              delta={ov.downloads?.deltaPct != null ? `${ov.downloads.deltaPct}% ${L('vs_prev')}` : null}
+              spark={monthVals} bigIcon={IconDownload} tone="blue" />
+            <KpiTrend label={L('k_dau')} value={fmt(d.dau)} spark={monthVals} bigIcon={IconUsers} tone="blue" />
+            <KpiTrend label={L('k_mau')} value={fmt(d.mau)}
+              delta={ov.mau?.deltaPct != null ? `${ov.mau.deltaPct}% ${L('vs_prev')}` : null}
+              spark={monthVals} bigIcon={IconTrendingUp} tone="blue" />
+            <KpiTrend label={L('k_benefits')} value={fmt(d.benefitsRedeemed)} spark={monthVals} bigIcon={IconGift} tone="blue" />
+          </div>
+          <Card className="commercial-layout-8" >
+            <b>{L('com_downloads_total')}</b>
+            <div className="commercial-layout-9" >
+              <LineChartInteractive vals={monthVals} labels={monthLabels} format={(v) => fmt(v)} />
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {tab === 'conversion' && (
+        <div className="tab-fade">
+          <div className="grid g4">
+            <KpiTrend label={L('k_converted')} value={fmt(d.converted)}
+              delta={`${d.convRate}% ${L('conv_of_mau')}`} spark={monthVals} bigIcon={IconStar} tone="blue" />
+            <KpiTrend label={L('k_dau')} value={fmt(d.dau)} spark={monthVals} bigIcon={IconUsers} tone="blue" />
+            <KpiTrend label={L('k_mau')} value={fmt(d.mau)}
+              delta={ov.mau?.deltaPct != null ? `${ov.mau.deltaPct}% ${L('vs_prev')}` : null}
+              spark={monthVals} bigIcon={IconTrendingUp} tone="blue" />
+            <KpiTrend label={L('k_benefits')} value={fmt(d.benefitsRedeemed)} spark={monthVals} bigIcon={IconGift} tone="blue" />
+          </div>
+          <div className="grid g2 commercial-layout-10" >
+            <Card>
+              <div className="flex between">
+                <b>{L('c_funnel')}</b>
+                <button
+                  type="button"
+                  className="btn sec sm"
+                  onClick={() => setEmbudoView((v) => (v === 'steps' ? 'circular' : 'steps'))}
+                >
+                  {embudoView === 'steps' ? (isEn ? '◔ Circular' : '◔ Ver circular') : (isEn ? '▤ Steps' : '▤ Ver escalones')}
+                </button>
+              </div>
+              <div className="commercial-layout-11" >
+                {embudoView === 'steps' ? (
+                  <Funnel data={(d.funnel || []).map((f) => ({ label: f.label, value: f.value }))} format={(v) => fmt(v)} />
+                ) : (
+                  <DonutMulti
+                    data={(d.funnel || []).map((f, i) => ({
+                      label: f.label, value: f.value, color: CAT_COLORS[i % CAT_COLORS.length], disp: fmt(f.value),
+                    }))}
+                    centerLabel={`${d.convRate || 0}%`}
+                  />
+                )}
+              </div>
+            </Card>
+            <Card>
+              <b>{isEn ? 'Conversion rate' : 'Tasa de conversión'}</b>
+              <div className="commercial-layout-12" >
+                <DonutMulti
+                  data={[
+                    { label: isEn ? 'Converted' : 'Convertidos', value: d.converted || 0, color: 'var(--brand)', disp: fmt(d.converted || 0) },
+                    { label: isEn ? 'Not converted' : 'No convertidos', value: notConverted, color: 'var(--line)', disp: fmt(notConverted) },
+                  ]}
+                  centerLabel={`${d.convRate || 0}%`}
+                />
+              </div>
+              <div className="note commercial-layout-13" >
+                {fmt(d.converted)} {isEn ? 'of' : 'de'} {fmt(d.mau)} MAU
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {tab === 'ingresos' && (
+        <div className="tab-fade">
+          <div className="grid g4">
+            <KpiTrend label={L('k_mrr')} value={`$${fmt(d.mrr)}`}
+              delta={ov.mrr?.deltaPct != null ? `${ov.mrr.deltaPct}% ${L('vs_prev')}` : null}
+              spark={monthVals} bigIcon={IconWallet} tone="blue" />
+            <KpiTrend label={L('k_benefits')} value={fmt(d.benefitsRedeemed)} spark={monthVals} bigIcon={IconGift} tone="blue" />
+            <KpiTrend label={L('k_converted')} value={`${fmt(d.converted)} · ${d.convRate}%`} spark={monthVals} bigIcon={IconStar} tone="blue" />
+            <KpiTrend label={L('k_mau')} value={fmt(d.mau)} spark={monthVals} bigIcon={IconTrendingUp} tone="blue" />
+          </div>
+          <Card className="commercial-layout-14" >
+            <b>{L('c_rev_plan')}</b>
+            <div className="commercial-layout-15" >
+              <div className="commercial-layout-16" >
+                <BarsInteractive data={revBars} />
+              </div>
+            </div>
+            <div className="flex between note commercial-layout-17" ><span>{L('c_rev_total')}</span><b className="commercial-layout-18" >${fmt(d.mrr)}{L('mo')}</b></div>
+          </Card>
+          <Card className="commercial-layout-19" >
+            <b>{L('c_badges_type')}</b>
+            <div className="commercial-layout-20" >
+              <DonutMulti data={badgeBars} pctPill centerLabel={fmt(d.badgesByType?.reduce((a, b) => a + (b.value || 0), 0) || 0)} />
+            </div>
+          </Card>
+        </div>
+      )}
+    </>
+  );
+}
