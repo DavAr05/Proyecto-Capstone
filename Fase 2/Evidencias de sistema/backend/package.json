@@ -1,0 +1,36 @@
+{
+  "name": "aprueba-admin-backend",
+  "version": "1.0.0",
+  "description": "API REST de la consola de administración de Aprueba (Express + Firestore)",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "seed": "node src/seed/seed.js",
+    "clear:audit": "node src/seed/clear-audit-log.js",
+    "emulator": "firebase emulators:start --only firestore",
+    "migrate:sponsor-benefits": "node src/scripts/migrate-sponsor-benefits.js",
+    "fix:benefits-schema": "node src/scripts/fix-benefits-schema.js",
+    "backfill:sponsor-fields": "node src/scripts/backfill-sponsor-fields.js",
+    "seed:emu": "cross-env-shell FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node src/seed/seed.js",
+    "smoke": "cross-env-shell FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node src/scripts/smoke-test.js",
+    "dev:emu": "cross-env-shell FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 node --watch src/index.js",
+    "backfill:admin-fields": "node src/scripts/backfill-admin-fields.js",
+    "migrate:plans": "node src/scripts/migrate-plans.js",
+    "migrate:ops": "node src/scripts/migrate-ops.js",
+    "generate:metrics": "node src/scripts/generate-metrics.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "firebase-admin": "^12.6.0",
+    "jsonwebtoken": "^9.0.2"
+  },
+  "devDependencies": {
+    "firebase-tools": "^13.29.1",
+    "cross-env": "^7.0.3"
+  }
+}
