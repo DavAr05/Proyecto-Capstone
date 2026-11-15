@@ -31,7 +31,8 @@ function normalizeBenefits(input = [], previous = []) {
         name: String(b.name || '').trim(),
         description: b.description || null,
         costPlatinum: Math.max(0, Number(b.costPlatinum) || 0),
-        stock: Math.max(0, Number(b.stock) || 0),
+        // stock null/'' = ilimitado; un número >= 0 = unidades disponibles.
+        stock: (b.stock === null || b.stock === undefined || b.stock === '') ? null : Math.max(0, Math.floor(Number(b.stock)) || 0),
         redeemedCount: prev ? prev.redeemedCount : 0,
         active: prev ? prev.active : true,
         icon: b.icon || null,
@@ -148,32 +149,71 @@ r.put('/sponsors/:id/benefits', requireRole('finance'), wrap(async (req, res) =>
   return ok(res, { ...current, benefits: normalized, ...totals(normalized) });
 }));
 
-// Registra el canje de un beneficio: baja stock, sube redeemedCount, y si el
-// stock llega a 0 lo marca inactivo (active:false), tal como especifica el
-// documento de Max ("false al dar de baja el sponsor o agotar stock").
+// Canje administrativo de un beneficio a nombre de un alumno (modelo de Max):
+// descuenta `costPlatinum` × cantidad del saldo de platino del alumno, baja stock
+// (si no es ilimitado; al llegar a 0 el beneficio pasa a active:false), sube
+// redeemedCount, deja el comprobante en benefitRedemptions y el asiento en
+// users/{id}/medalLedger, todo en UNA transacción. Es idempotente por
+// `requestId`: reintentar la misma solicitud devuelve el mismo comprobante y NO cobra otra vez.
 r.post('/sponsors/:id/benefits/:benefitId/redeem', requireRole('finance'), wrap(async (req, res) => {
+  const { userId, requestId } = req.body || {};
+  const cantidad = Number(req.body?.cantidad ?? 1);
+  if (typeof userId !== 'string' || !userId.trim()) return fail(res, 400, 'VALIDATION', 'userId es obligatorio');
+  if (typeof requestId !== 'string' || requestId.length < 8 || requestId.length > 100) return fail(res, 400, 'VALIDATION', 'requestId es obligatorio (8 a 100 caracteres)');
+  if (!Number.isSafeInteger(cantidad) || cantidad < 1 || cantidad > 1000) return fail(res, 400, 'VALIDATION', 'cantidad debe ser un entero positivo');
+
   const sponsor = await getDoc(COL.sponsors, req.params.id);
   if (!sponsor || isDeleted(sponsor)) return fail(res, 404, 'NOT_FOUND', 'Sponsor no encontrado');
-  const cantidad = Math.max(1, Number(req.body?.cantidad) || 1);
-  const benefits = await getSponsorBenefits(sponsor.id);
-  const idx = benefits.findIndex((b) => b.id === req.params.benefitId);
-  if (idx === -1) return fail(res, 404, 'NOT_FOUND', 'Beneficio no encontrado');
-  if (benefits[idx].stock < cantidad) return fail(res, 400, 'VALIDATION', 'Stock insuficiente');
-  const newStock = benefits[idx].stock - cantidad;
-  benefits[idx] = {
-    ...benefits[idx],
-    stock: newStock,
-    redeemedCount: benefits[idx].redeemedCount + cantidad,
-    active: newStock > 0,
-  };
-  await patchDoc(COL.benefits, req.params.benefitId, {
-    stock: benefits[idx].stock,
-    redeemedCount: benefits[idx].redeemedCount,
-    active: benefits[idx].active,
-    updatedAt: FieldValue.serverTimestamp(),
+
+  const benRef = db.collection(COL.benefits).doc(req.params.benefitId);
+  const userRef = db.collection(COL.users).doc(userId.trim());
+  const rdmRef = db.collection(COL.benefitRedemptions)
+    .doc(`rdm_${crypto.createHash('sha1').update(`${req.params.benefitId}:${userId.trim()}:${requestId}`).digest('hex').slice(0, 20)}`);
+
+  const result = await db.runTransaction(async (tx) => {
+    const [benSnap, userSnap, rdmSnap] = await Promise.all([tx.get(benRef), tx.get(userRef), tx.get(rdmRef)]);
+    if (rdmSnap.exists) return { replay: rdmSnap.data(), id: rdmRef.id };
+    if (!benSnap.exists || benSnap.data().sponsorId !== sponsor.id) return { error: [404, 'NOT_FOUND', 'Beneficio no encontrado'] };
+    if (!userSnap.exists) return { error: [404, 'NOT_FOUND', 'Alumno no encontrado'] };
+    const ben = benSnap.data(); const user = userSnap.data();
+    if (ben.active === false) return { error: [409, 'BENEFIT_INACTIVE', 'El beneficio no está disponible'] };
+    if (user.state && user.state !== 'active') return { error: [422, 'USER_NOT_ACTIVE', 'El alumno no está activo'] };
+    const unlimited = ben.stock === null || ben.stock === undefined;
+    if (!unlimited && ben.stock < cantidad) return { error: [400, 'VALIDATION', 'Stock insuficiente'] };
+    const cost = (Number(ben.costPlatinum) || 0) * cantidad;
+    const medals = { bronze: 0, silver: 0, gold: 0, diamond: 0, platinum: 0, ...(user.medals || {}) };
+    if (medals.platinum < cost) return { error: [422, 'INSUFFICIENT_MEDALS', 'El alumno no tiene suficiente platino'] };
+
+    const now = new Date().toISOString();
+    const stockAfter = unlimited ? null : ben.stock - cantidad;
+    medals.platinum -= cost;
+    const receipt = {
+      userId: userId.trim(), benefitId: ben.id || benSnap.id, benefitName: ben.name, sponsorId: sponsor.id,
+      couponCode: `APR-${crypto.randomBytes(4).toString('hex').toUpperCase()}`,
+      platinumSpent: cost, cantidad, totalCostPlatinum: cost, balanceAfter: medals.platinum, stockAfter,
+      requestId, by: req.user.id, createdAt: now,
+    };
+    tx.set(rdmRef, receipt);
+    tx.set(userRef, { medals, updatedAt: now }, { merge: true });
+    tx.set(userRef.collection('medalLedger').doc(), {
+      event: 'redeem', tier: 'platinum', amount: -cost, reason: 'benefit_redeemed',
+      refType: 'benefit', refId: benSnap.id, by: req.user.id, createdAt: now,
+    });
+    tx.set(benRef, {
+      ...(unlimited ? {} : { stock: stockAfter, active: stockAfter > 0 }),
+      redeemedCount: (ben.redeemedCount || 0) + cantidad,
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
+    return { receipt, id: rdmRef.id };
   });
-  await logAudit(req, 'redeem', `sponsors/${req.params.id}/benefits/${req.params.benefitId}`, { cantidad });
-  return ok(res, { ...sponsor, benefits, ...totals(benefits) });
+
+  if (result.error) return fail(res, ...result.error);
+  const benefits = await getSponsorBenefits(sponsor.id);
+  if (result.replay) {
+    return ok(res, { ...sponsor, benefits, ...totals(benefits), redemption: { id: result.id, ...result.replay }, replayed: true });
+  }
+  await logAudit(req, 'redeem', `sponsors/${req.params.id}/benefits/${req.params.benefitId}`, { userId: userId.trim(), cantidad, redemptionId: result.id });
+  return ok(res, { ...sponsor, benefits, ...totals(benefits), redemption: { id: result.id, ...result.receipt } });
 }));
 
 // Baja de un sponsor: borrado lógico (`deletedAt`), no físico. El documento

@@ -21,8 +21,8 @@ function withActivity(u) {
   return { ...u, lastActiveLabel: label };
 }
 
-// GET /admin/users (admin/support) — búsqueda + paginación por cursor simple
-r.get('/users', requireRole('support'), wrap(async (req, res) => {
+// GET /admin/users (admin/support/finance: finance lo usa para buscar al alumno en el canje) — búsqueda + paginación por cursor simple
+r.get('/users', requireRole('support', 'finance'), wrap(async (req, res) => {
   const { q, plan, state, limit = 20, cursor } = req.query;
   let rows = await listAll(COL.users, 'nameLower');
   if (q) {

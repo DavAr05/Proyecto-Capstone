@@ -13,6 +13,7 @@ export const COL = {
   // array embebido dentro de cada sponsor; ver MODELO_CAMBIOS.md.
   benefits: 'benefits',
   users: 'users',
+  benefitRedemptions: 'benefitRedemptions', // canjes de beneficios (modelo de Max)
   // Renombrada a supportTickets según el modelo canónico de Max (antes
   // `tickets`); el campo de estado también pasó de `state` a `status`
   // (ver Fase 2, item #1, y MODELO_CAMBIOS.md).

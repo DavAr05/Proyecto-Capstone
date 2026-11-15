@@ -17,7 +17,7 @@ export function assertSafeTarget(label) {
     console.error(
       `\n[${label}] BLOQUEADO: no hay FIRESTORE_EMULATOR_HOST y no pasaste --real.\n` +
       `  • Para probar sin gastar cuota: corre "npm run emulator" en otra terminal y\n` +
-      `    define FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 (o usa "npm run seed:emu").\n` +
+      `    define FIRESTORE_EMULATOR_HOST=127.0.0.1:18085 (o usa "npm run seed:emu").\n` +
       `  • Para tocar el Firestore REAL a propósito: agrega --real al comando.\n`
     );
     process.exit(1);

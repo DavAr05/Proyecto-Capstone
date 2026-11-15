@@ -11,6 +11,14 @@ if (!process.env.FIRESTORE_EMULATOR_HOST) {
   process.exit(1);
 }
 process.env.JWT_SECRET ||= 'smoke-secret';
+process.env.MFA_REPLAY_GUARD = 'off'; // el smoke reutiliza el mismo código TOTP en el mismo paso de 30 s
+import fs from 'node:fs';
+import { totp } from '../lib/totp.js';
+let CRED;
+try { CRED = JSON.parse(fs.readFileSync(new URL('../../.seed-credentials.json', import.meta.url), 'utf8')); }
+catch { console.error('[smoke] Falta backend/.seed-credentials.json: corre "npm run seed:emu" antes.'); process.exit(1); }
+const PW = (e) => CRED[e].password;
+const OTP = (e) => totp(CRED[e].mfaSecret);
 
 const { default: app } = await import('../app.js');
 const { db } = await import('../data/repo.js');
@@ -41,21 +49,21 @@ async function login(email, password, otp) {
 
 try {
   section('Login y roles');
-  const bad = await call('POST', '/auth/login', { body: { email: 'admin@aprueba.cl', password: 'mala', otp: '123456' } });
+  const bad = await call('POST', '/auth/login', { body: { email: 'admin@aprueba.cl', password: 'mala', otp: OTP('admin@aprueba.cl') } });
   check('contraseña incorrecta → 401', bad.status === 401);
-  const noOtp = await call('POST', '/auth/login', { body: { email: 'admin@aprueba.cl', password: 'admin123' } });
+  const noOtp = await call('POST', '/auth/login', { body: { email: 'admin@aprueba.cl', password: PW('admin@aprueba.cl') } });
   check('admin sin OTP → 401 AUTH_MFA_REQUIRED', noOtp.status === 401 && noOtp.error?.code === 'AUTH_MFA_REQUIRED');
-  const admin = await login('admin@aprueba.cl', 'admin123', '123456');
-  let finance = await login('finance@aprueba.cl', 'finance123', '123456');
-  const ops = await login('ops@aprueba.cl', 'ops123');
-  const support = await login('support@aprueba.cl', 'support123');
+  const admin = await login('admin@aprueba.cl', PW('admin@aprueba.cl'), OTP('admin@aprueba.cl'));
+  let finance = await login('finance@aprueba.cl', PW('finance@aprueba.cl'), OTP('finance@aprueba.cl'));
+  const ops = await login('ops@aprueba.cl', PW('ops@aprueba.cl'));
+  const support = await login('support@aprueba.cl', PW('support@aprueba.cl'));
   check('los 4 roles obtienen token', !!(admin && finance && ops && support));
   check('sin token → 401', (await call('GET', '/users')).status === 401);
   check('ops no puede ver usuarios → 403', (await call('GET', '/users', { token: ops })).status === 403);
   check('support no puede ver sponsors → 403', (await call('GET', '/sponsors', { token: support })).status === 403);
 
   section('Sesiones y logout real (adminSessions)');
-  const sLogin = await call('POST', '/auth/login', { body: { email: 'support@aprueba.cl', password: 'support123' } });
+  const sLogin = await call('POST', '/auth/login', { body: { email: 'support@aprueba.cl', password: PW('support@aprueba.cl') } });
   const sTok = sLogin.data.accessToken;
   const sRef = sLogin.data.refreshToken;
   check('login crea sesión: el access token funciona', (await call('GET', '/tickets', { token: sTok })).status === 200);
@@ -72,7 +80,7 @@ try {
   const aud = await db.collection('auditLog').where('action', '==', 'logout').get();
   check('el logout queda en la auditoría (action=logout)', !aud.empty);
   // Rotación del refresh token
-  const rl = await call('POST', '/auth/login', { body: { email: 'support@aprueba.cl', password: 'support123' } });
+  const rl = await call('POST', '/auth/login', { body: { email: 'support@aprueba.cl', password: PW('support@aprueba.cl') } });
   const rt0 = rl.data.refreshToken;
   const rr1 = await call('POST', '/auth/refresh', { body: { refreshToken: rt0 } });
   check('refresh devuelve un refresh token NUEVO (rotación)', rr1.status === 200 && !!rr1.data.refreshToken && rr1.data.refreshToken !== rt0);
@@ -88,24 +96,24 @@ try {
   check('detectado el reuso, TAMBIÉN se invalida el token vigente (sesión revocada)', afterReuse.status === 401);
   check('el reuso queda auditado como logout', !(await db.collection('auditLog').where('action', '==', 'logout').get()).empty);
 
-  const fin = { email: 'finance@aprueba.cl', password: 'finance123', otp: '123456' };
+  const fin = { email: 'finance@aprueba.cl', password: PW('finance@aprueba.cl'), otp: OTP('finance@aprueba.cl') };
   const l1 = await call('POST', '/auth/login', { body: fin });
   const l2 = await call('POST', '/auth/login', { body: fin });
   const all = await call('POST', '/auth/logout-all', { token: l1.data.accessToken, body: {} });
   check('logout-all → 204', all.status === 204);
   check('logout-all invalida también las demás sesiones', (await call('GET', '/tickets', { token: l2.data.accessToken })).status === 401);
-  finance = await login('finance@aprueba.cl', 'finance123', '123456');
+  finance = await login('finance@aprueba.cl', PW('finance@aprueba.cl'), OTP('finance@aprueba.cl'));
 
   section('Usuarios admin (#7: active, emailLower, bloqueo)');
   const adm = (id) => db.collection('adminUsers').doc(id);
   const a1 = (await adm('adm_1').get()).data();
   check('adminUsers con emailLower, active:true, createdAt', a1.emailLower === 'admin@aprueba.cl' && a1.active === true && !!a1.createdAt);
   check('login exitoso fija lastLoginAt y reinicia failedLoginCount', !!a1.lastLoginAt && a1.failedLoginCount === 0);
-  const upper = await call('POST', '/auth/login', { body: { email: 'ADMIN@Aprueba.cl', password: 'admin123', otp: '123456' } });
+  const upper = await call('POST', '/auth/login', { body: { email: 'ADMIN@Aprueba.cl', password: PW('admin@aprueba.cl'), otp: OTP('admin@aprueba.cl') } });
   check('login es case-insensitive en el correo (emailLower)', upper.status === 200);
-  const opsLogin = await call('POST', '/auth/login', { body: { email: 'ops@aprueba.cl', password: 'ops123' } });
+  const opsLogin = await call('POST', '/auth/login', { body: { email: 'ops@aprueba.cl', password: PW('ops@aprueba.cl') } });
   await adm('adm_3').update({ active: false });
-  const disabled = await call('POST', '/auth/login', { body: { email: 'ops@aprueba.cl', password: 'ops123' } });
+  const disabled = await call('POST', '/auth/login', { body: { email: 'ops@aprueba.cl', password: PW('ops@aprueba.cl') } });
   check('cuenta con active=false → 403 ACCOUNT_DISABLED', disabled.status === 403 && disabled.error?.code === 'ACCOUNT_DISABLED');
   const disabledBad = await call('POST', '/auth/login', { body: { email: 'ops@aprueba.cl', password: 'mala' } });
   check('contraseña mala en cuenta deshabilitada sigue siendo 401 (no revela la cuenta)', disabledBad.status === 401);
@@ -119,10 +127,10 @@ try {
   check('un admin deshabilitado no aparece en /agents', agents.status === 200 && !agents.data.some((a) => a.id === 'adm_1'));
   await adm('adm_1').update({ active: true });
   for (let i = 0; i < 10; i += 1) await call('POST', '/auth/login', { body: { email: 'ops@aprueba.cl', password: 'incorrecta' } });
-  const locked = await call('POST', '/auth/login', { body: { email: 'ops@aprueba.cl', password: 'ops123' } });
+  const locked = await call('POST', '/auth/login', { body: { email: 'ops@aprueba.cl', password: PW('ops@aprueba.cl') } });
   check('10 fallos → cuenta bloqueada, aun con contraseña correcta → 423 ACCOUNT_LOCKED', locked.status === 423 && locked.error?.code === 'ACCOUNT_LOCKED');
   await adm('adm_3').update({ lockedUntil: null, failedLoginCount: 0 });
-  const unlocked = await call('POST', '/auth/login', { body: { email: 'ops@aprueba.cl', password: 'ops123' } });
+  const unlocked = await call('POST', '/auth/login', { body: { email: 'ops@aprueba.cl', password: PW('ops@aprueba.cl') } });
   check('al vencer/limpiar el bloqueo vuelve a entrar', unlocked.status === 200);
 
   section('Tickets');
@@ -194,10 +202,32 @@ try {
   const sid = newSp.data.id; const bid = newSp.data.benefits[0].id;
   const doc = (await db.collection('sponsors').doc(sid).get()).data();
   check('doc sponsor tiene nameLower, deletedAt:null, createdBy', doc.nameLower === 'sponsor smoke' && doc.deletedAt === null && !!doc.createdBy);
-  const red = await call('POST', `/sponsors/${sid}/benefits/${bid}/redeem`, { token: finance, body: { cantidad: 1 } });
-  check('canjear → redeemedCount 1', red.status === 200 && red.data.benefits[0].redeemedCount === 1);
-  const red2 = await call('POST', `/sponsors/${sid}/benefits/${bid}/redeem`, { token: finance, body: { cantidad: 5 } });
+  const fsearch = await call('GET', '/users?state=active&limit=5', { token: finance });
+  check('finance puede buscar alumnos (para el canje) → 200', fsearch.status === 200 && fsearch.data.length > 0);
+  const stu = fsearch.data[0].id;
+  const plat0 = (await db.collection('users').doc(stu).get()).data().medals.platinum;
+  const rid = 'req-smoke-0001';
+  const red = await call('POST', `/sponsors/${sid}/benefits/${bid}/redeem`, { token: finance, body: { userId: stu, cantidad: 1, requestId: rid } });
+  check('canjear → 200, redeemedCount 1 y comprobante', red.status === 200 && red.data.benefits[0].redeemedCount === 1 && !!red.data.redemption?.id);
+  check('el canje descuenta 10 de platino al alumno', (await db.collection('users').doc(stu).get()).data().medals.platinum === plat0 - 10 && red.data.redemption.balanceAfter === plat0 - 10);
+  check('canje: stock 2 → 1', red.data.redemption.stockAfter === 1);
+  check('canje: queda en benefitRedemptions con couponCode y platinumSpent', (await db.collection('benefitRedemptions').doc(red.data.redemption.id).get()).data()?.platinumSpent === 10);
+  check('canje: asiento redeem/platinum/-10 en medalLedger', !(await db.collection('users').doc(stu).collection('medalLedger').where('event', '==', 'redeem').get()).empty);
+  const rep = await call('POST', `/sponsors/${sid}/benefits/${bid}/redeem`, { token: finance, body: { userId: stu, cantidad: 1, requestId: rid } });
+  check('reintento con el mismo requestId NO cobra de nuevo (idempotente)', rep.status === 200 && rep.data.replayed === true && (await db.collection('users').doc(stu).get()).data().medals.platinum === plat0 - 10);
+  const noUser = await call('POST', `/sponsors/${sid}/benefits/${bid}/redeem`, { token: finance, body: { cantidad: 1, requestId: 'req-smoke-0002' } });
+  check('canje sin userId → 400', noUser.status === 400);
+  const red2 = await call('POST', `/sponsors/${sid}/benefits/${bid}/redeem`, { token: finance, body: { userId: stu, cantidad: 5, requestId: 'req-smoke-0003' } });
   check('canjear más que el stock → 400', red2.status === 400);
+  await db.collection('users').doc(stu).update({ 'medals.platinum': 0 });
+  const poor = await call('POST', `/sponsors/${sid}/benefits/${bid}/redeem`, { token: finance, body: { userId: stu, cantidad: 1, requestId: 'req-smoke-0004' } });
+  check('alumno sin platino → 422 INSUFFICIENT_MEDALS', poor.status === 422 && poor.error?.code === 'INSUFFICIENT_MEDALS');
+  await db.collection('users').doc(stu).update({ 'medals.platinum': 100 });
+  const unl = await call('POST', '/sponsors', { token: finance, body: { name: 'Sponsor Ilimitado', tier: 'Bronze', monthlyFee: 1, benefits: [{ name: 'Sin tope', costPlatinum: 1, stock: null }] } });
+  check('stock ilimitado: se guarda como null', unl.status === 201 && unl.data.benefits[0].stock === null);
+  const ru = await call('POST', `/sponsors/${unl.data.id}/benefits/${unl.data.benefits[0].id}/redeem`, { token: finance, body: { userId: stu, cantidad: 3, requestId: 'req-smoke-0005' } });
+  check('canjear stock ilimitado: sigue activo y sin stock numérico', ru.status === 200 && ru.data.benefits[0].stock === null && ru.data.benefits[0].active !== false);
+  await call('DELETE', `/sponsors/${unl.data.id}`, { token: finance });
   const del = await call('DELETE', `/sponsors/${sid}`, { token: finance });
   check('baja de sponsor → 204', del.status === 204);
   const doc2 = (await db.collection('sponsors').doc(sid).get());

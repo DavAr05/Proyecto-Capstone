@@ -3,6 +3,9 @@
 // Sin FIRESTORE_EMULATOR_HOST y sin --real el script se detiene (ver lib/envGuard.js).
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import { generateSecret, otpauthUri } from '../lib/totp.js';
 import { db, COL } from '../data/repo.js';
 import { assertSafeTarget } from '../lib/envGuard.js';
 import { writeSyntheticMetrics } from '../lib/syntheticMetrics.js';
@@ -10,22 +13,30 @@ import { writeSyntheticMetrics } from '../lib/syntheticMetrics.js';
 const hoursAgo = (h) => new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
 const daysAgo = (d) => hoursAgo(d * 24);
 
-// adminUsers al pie de la ficha de Max (sección 4): emailLower, active,
-// failedLoginCount, lockedUntil, lastLoginAt, mfaSecret y createdAt/updatedAt.
-// bcrypt coste 12 (el documento lo fija). mfaSecret queda en null: el TOTP
-// cifrado con KMS no aplica aún, el MFA sigue siendo el OTP de demostración.
+// adminUsers al pie de la ficha de Max (sección 4). bcrypt coste 12.
+// SEG-01/SEG-02: NO hay contraseñas ni MFA fijos en el código. Cada contraseña sale de
+// SEED_PASSWORD_<ROL> (env) o se genera al azar; el secreto TOTP sale de SEED_MFA_SECRET_<ROL>
+// o se genera al azar. Todo se escribe en backend/.seed-credentials.json (gitignored).
 const SEED_NOW = new Date();
-const mkAdmin = (id, name, email, role, mfaEnabled, password) => ({
-  id, name, email, emailLower: email.toLowerCase(), passwordHash: bcrypt.hashSync(password, 12),
-  role, mfaEnabled, mfaSecret: null, active: true,
-  failedLoginCount: 0, lockedUntil: null, lastLoginAt: null,
-  createdAt: SEED_NOW, updatedAt: SEED_NOW,
-});
+const rndPass = () => crypto.randomBytes(9).toString('base64url');
+const creds = {};
+const mkAdmin = (id, name, email, role, mfaEnabled) => {
+  const key = role.toUpperCase();
+  const password = process.env[`SEED_PASSWORD_${key}`] || rndPass();
+  const mfaSecret = mfaEnabled ? (process.env[`SEED_MFA_SECRET_${key}`] || generateSecret()) : null;
+  creds[email] = { password, mfaSecret, otpauth: mfaSecret ? otpauthUri(mfaSecret, email) : null };
+  return {
+    id, name, email, emailLower: email.toLowerCase(), passwordHash: bcrypt.hashSync(password, 12),
+    role, mfaEnabled, mfaSecret, lastTotpStep: null, active: true,
+    failedLoginCount: 0, lockedUntil: null, lastLoginAt: null,
+    createdAt: SEED_NOW, updatedAt: SEED_NOW,
+  };
+};
 const adminUsers = [
-  mkAdmin('adm_1', 'Admin General', 'admin@aprueba.cl', 'admin', true, 'admin123'),
-  mkAdmin('adm_2', 'Finanzas', 'finance@aprueba.cl', 'finance', true, 'finance123'),
-  mkAdmin('adm_3', 'Operaciones', 'ops@aprueba.cl', 'ops', false, 'ops123'),
-  mkAdmin('adm_4', 'Soporte', 'support@aprueba.cl', 'support', false, 'support123'),
+  mkAdmin('adm_1', 'Admin General', 'admin@aprueba.cl', 'admin', true),
+  mkAdmin('adm_2', 'Finanzas', 'finance@aprueba.cl', 'finance', true),
+  mkAdmin('adm_3', 'Operaciones', 'ops@aprueba.cl', 'ops', false),
+  mkAdmin('adm_4', 'Soporte', 'support@aprueba.cl', 'support', false),
 ];
 
 // features/{fN} al pie de la ficha de Max (sección 5): key estable, name {es,en},
@@ -163,7 +174,7 @@ const users = usersRaw.map(({ badgesBronze, ...u }) => ({
   sessionsRevokedAt: u.sessionsRevokedAt ?? null,
   pendingEmail: u.pendingEmail ?? null,
   lastActiveDate: u.lastActiveAt.slice(0, 10),
-  medals: { bronze: badgesBronze, silver: 0, gold: 0, diamond: 0, platinum: 0 },
+  medals: { bronze: badgesBronze, silver: 0, gold: 0, diamond: 0, platinum: 500 },
   badgesTotal: badgesBronze,
   lastAdminAction: u.lastAdminAction ?? null,
   stripeCustomerId: u.stripeCustomerId ?? null,
@@ -491,11 +502,10 @@ async function run() {
   console.log('  ✓ metrics: 2 docs (overview, commercial)');
   const mm = await writeSyntheticMetrics(db, { sponsorIds: sponsors.filter((x) => !x.deletedAt).map((x) => x.id) });
   console.log(`  ✓ metricsDaily: ${mm.daily} docs · metricsMonthly: ${mm.monthly} docs (sintéticos)`);
-  console.log('Listo. Usuarios admin de prueba:');
-  console.log('  admin@aprueba.cl / admin123 (MFA otp 123456)');
-  console.log('  finance@aprueba.cl / finance123 (MFA otp 123456)');
-  console.log('  ops@aprueba.cl / ops123');
-  console.log('  support@aprueba.cl / support123');
+  const credFile = new URL('../../.seed-credentials.json', import.meta.url);
+  fs.writeFileSync(credFile, JSON.stringify(creds, null, 2), { mode: 0o600 });
+  console.log('Listo. Credenciales de prueba guardadas en backend/.seed-credentials.json (no se sube a git).');
+  console.log('  Escanea el otpauth de admin/finance en Google Authenticator / Authy.');
   process.exit(0);
 }
 run().catch((e) => { console.error(e); process.exit(1); });

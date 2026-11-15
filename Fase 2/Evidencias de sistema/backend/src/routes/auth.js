@@ -4,6 +4,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { ok, fail } from '../lib/envelope.js';
 import { wrap } from '../middleware/error.js';
 import { authRequired } from '../middleware/auth.js';
+import { verifyTotp } from '../lib/totp.js';
 import { logAudit } from '../lib/audit.js';
 import {
   signAccess,
@@ -143,12 +144,27 @@ r.post('/auth/login', wrap(async (req, res) => {
     );
   }
 
-  // Se conserva el MFA de demostración de tu implementación.
-  if (user.mfaEnabled && otp !== '123456') {
-    return fail(
-      res, 401, 'AUTH_MFA_REQUIRED',
-      'Se requiere código MFA válido (demo: 123456)'
-    );
+  // MFA real: TOTP (RFC 6238) con el secreto del administrador (mfaSecret).
+  // Anti-replay: un código ya usado (lastTotpStep) no se acepta de nuevo.
+  let totpStepUsed = null;
+  if (user.mfaEnabled) {
+    if (!user.mfaSecret) {
+      return fail(
+        res, 401, 'AUTH_MFA_REQUIRED',
+        'MFA sin configurar para esta cuenta. Pide a un administrador ejecutar "npm run mfa:setup".'
+      );
+    }
+    const guard = process.env.MFA_REPLAY_GUARD !== 'off';
+    totpStepUsed = verifyTotp(user.mfaSecret, otp, {
+      lastStep: guard ? (user.lastTotpStep ?? null) : null,
+    });
+    if (totpStepUsed == null) {
+      await touchAdmin(user.id, { failedLoginCount: (user.failedLoginCount || 0) + 1, updatedAt: FieldValue.serverTimestamp() });
+      return fail(
+        res, 401, 'AUTH_MFA_REQUIRED',
+        'Se requiere un código MFA válido (app autenticadora)'
+      );
+    }
   }
 
   const pub = pubOf(user);
@@ -183,6 +199,7 @@ r.post('/auth/login', wrap(async (req, res) => {
       failedLoginCount: 0,
       lockedUntil: null,
       lastLoginAt: now,
+      ...(totpStepUsed != null ? { lastTotpStep: totpStepUsed } : {}),
       updatedAt: now,
     },
     { merge: true }
