@@ -287,7 +287,7 @@ export default function Tutors({ ctx }) {
                             Instagram) para no ocupar tanto espacio; el texto completo
                             "Verificado" se deja únicamente en la ficha del tutor. */}
                         {x.verified && (
-                          <span className="tu-verified-ic" title={L('tu_verified')} aria-label={L('tu_verified')}>
+                          <span className="tu-verified-ic" role="img" title={L('tu_verified')} aria-label={L('tu_verified')}>
                             <IconVerifiedBadge size={15} />
                           </span>
                         )}

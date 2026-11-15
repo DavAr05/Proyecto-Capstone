@@ -86,7 +86,7 @@ export function RedeemBenefitForm({ sponsor, benefit, isEn, onClose, onCompleted
           <dt>{isEn ? 'Quantity' : 'Cantidad'}</dt><dd>{number(receipt.cantidad)}</dd>
           <dt>{isEn ? 'Platinum charged' : 'Platino descontado'}</dt><dd>{number(receipt.totalCostPlatinum)}</dd>
           <dt>{isEn ? 'Remaining platinum' : 'Saldo de platino'}</dt><dd>{number(receipt.balanceAfter)}</dd>
-          <dt>{isEn ? 'Stock left' : 'Stock restante'}</dt><dd>{number(receipt.stockAfter)}</dd>
+          <dt>{isEn ? 'Stock left' : 'Stock restante'}</dt><dd>{receipt.stockAfter == null ? (isEn ? 'Unlimited' : 'Ilimitado') : number(receipt.stockAfter)}</dd>
           <dt>{isEn ? 'Receipt' : 'Comprobante'}</dt><dd className="rd-mono">{receipt.id}</dd>
         </dl>
       </Modal>
@@ -147,8 +147,8 @@ export function RedeemBenefitForm({ sponsor, benefit, isEn, onClose, onCompleted
         </Field>
 
         <Field label={isEn ? 'Quantity' : 'Cantidad'}
-          hint={`${isEn ? 'Stock' : 'Stock'}: ${number(benefit.stock || 0)}`}>
-          <input type="number" min="1" step="1" max={benefit.stock} value={quantity} disabled={locked}
+          hint={`${isEn ? 'Stock' : 'Stock'}: ${benefit.stock == null ? (isEn ? 'Unlimited' : 'Ilimitado') : number(benefit.stock)}`}>
+          <input type="number" min="1" step="1" max={benefit.stock ?? undefined} value={quantity} disabled={locked}
             onChange={(e) => setQuantity(e.target.value)} />
         </Field>
 

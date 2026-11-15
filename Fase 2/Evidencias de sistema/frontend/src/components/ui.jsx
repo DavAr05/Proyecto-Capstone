@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState, useRef } from 'react';
+import { useMemo, useEffect, useState, useRef, useId, isValidElement, cloneElement } from 'react';
 import { makeL } from '../i18n.js';
 
 // Traducción para componentes que no reciben `L` (Modal, gráficos): toma el
@@ -205,12 +205,26 @@ export function useToast() {
 export function Modal({ title, subtitle, children, onClose, footer, wide, busy }) {
   const ref = useRef(null);
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape' && !busy) onClose(); };
+    const opener = document.activeElement; // para devolver el foco al cerrar
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !busy) { onClose(); return; }
+      if (e.key !== 'Tab' || !ref.current) return;
+      // Trampa de foco: Tab / Shift+Tab se quedan dentro del diálogo.
+      const f = [...ref.current.querySelectorAll('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])')];
+      if (!f.length) return;
+      const first = f[0]; const last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     ref.current?.querySelector('input,select,textarea,button')?.focus();
-    return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = prev; };
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+      if (opener && typeof opener.focus === 'function' && document.contains(opener)) opener.focus();
+    };
   }, [onClose, busy]);
 
   return (
@@ -248,11 +262,21 @@ export function Confirm({ title, message, confirmLabel, cancelLabel, danger, bus
 }
 
 export function Field({ label, hint, children, wide }) {
+  // Asocia la etiqueta con su control (lectores de pantalla y clic en la etiqueta).
+  // Si el hijo es un único elemento sin id (input/select/textarea/Select) se le inyecta
+  // el id; si es una estructura compuesta, el grupo queda nombrado con aria-labelledby.
+  const uid = useId();
+  const labelId = `${uid}-l`; const hintId = `${uid}-h`; const ctlId = `${uid}-c`;
+  const single = isValidElement(children) && !children.props.id && typeof children.type === 'string'
+    ? ['input', 'select', 'textarea'].includes(children.type) : (isValidElement(children) && children.type?.name === 'Select');
+  const control = single
+    ? cloneElement(children, { id: ctlId, 'aria-describedby': hint ? hintId : undefined })
+    : children;
   return (
-    <div className={`field ${wide ? 'span-2' : ''}`}>
-      <label>{label}</label>
-      {children}
-      {hint && <div className="note" style={{ marginTop: 3 }}>{hint}</div>}
+    <div className={`field ${wide ? 'span-2' : ''}`} {...(single ? {} : { role: 'group', 'aria-labelledby': labelId })}>
+      <label id={labelId} htmlFor={single ? ctlId : undefined}>{label}</label>
+      {control}
+      {hint && <div className="note" id={hintId} style={{ marginTop: 3 }}>{hint}</div>}
     </div>
   );
 }
@@ -261,7 +285,8 @@ export function FormGrid({ children }) { return <div className="form-grid">{chil
 
 export function Select({ value, onChange, options, placeholder, ...rest }) {
   return (
-    <select value={value ?? ''} onChange={(e) => onChange(e.target.value)} {...rest}>
+    <select value={value ?? ''} onChange={(e) => onChange(e.target.value)}
+      aria-label={rest['aria-label'] ?? (rest.id || rest['aria-labelledby'] || placeholder == null ? undefined : placeholder)} {...rest}>
       {placeholder != null && <option value="">{placeholder}</option>}
       {options.map((o) => (
         <option key={o.value} value={o.value}>{o.label}</option>

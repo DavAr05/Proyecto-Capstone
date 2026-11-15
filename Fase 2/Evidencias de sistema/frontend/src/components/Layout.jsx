@@ -5,7 +5,7 @@ import { VIEWS } from '../App.jsx';
 import { IconMenuFilled, IconGlobeFilled, IconSunFilled, IconMoonFilled, IconLogOutFilled } from './ui.jsx';
 
 const Logo = () => (
-  <svg width="26" height="26" viewBox="0 0 30 30" fill="none">
+  <svg width="26" height="26" viewBox="0 0 30 30" fill="none" aria-hidden="true" focusable="false">
     <polygon points="3,27 9,6 13,6 8,27" fill="#fff" /><polygon points="27,27 21,6 17,6 22,27" fill="#fff" />
     <rect x="7" y="14" width="16" height="4" rx="1" fill="#fff" /><rect x="12" y="14" width="6" height="10" rx="1" fill="#F5B041" />
     <polygon points="15,5 12,10 18,10" fill="#F5B041" />
@@ -36,9 +36,10 @@ export default function Layout({ ctx, children }) {
 
   return (
     <div className="app">
+      <a className="skip-link" href="#contenido">{L('skip_content')}</a>
       <aside className={`sidebar ${open ? 'open' : ''}`}>
         <div className="side-logo"><Logo /><div>Aprueba<small>{L('console')}</small></div></div>
-        <nav className="nav">
+        <nav className="nav" aria-label={L('nav_main')}>
           {grp1.length > 0 && <div className="nav-sec">{L('nav_grp1')}</div>}
           {grp1.map(NavItem)}
           {grp2.length > 0 && <div className="nav-sec">{L('nav_grp2')}</div>}
@@ -53,24 +54,24 @@ export default function Layout({ ctx, children }) {
           <button type="button" className="side-logout" onClick={() => { if (window.confirm(L('logout_all_confirm'))) logoutAll(); }} disabled={loggingOut} style={{ marginTop: 6, opacity: 0.8, fontSize: 12 }}>{L('logout_all')}</button>
         </div>
       </aside>
-      <div className={`scrim ${open ? 'open' : ''}`} onClick={() => setOpen(false)} />
+      <div className={`scrim ${open ? 'open' : ''}`} onClick={() => setOpen(false)} aria-hidden="true" />
       <div className="main-wrap">
         <header className="topbar">
-          <button className="hamb" onClick={() => setOpen(true)} aria-label={L('menu')}><IconMenuFilled size={18} /></button>
-          <div className="page-title">{L('nav_' + current.id)}</div>
+          <button type="button" className="hamb" onClick={() => setOpen(true)} aria-label={L('menu')} aria-expanded={open}><IconMenuFilled size={18} /></button>
+          <div className="page-title" role="heading" aria-level={1}>{L('nav_' + current.id)}</div>
           <div className="tb-right">
             <span className="ctl-group">
               <IconGlobeFilled size={14} />
-              <select className="ctl" value={lang} onChange={(e) => setLang(e.target.value)}>
+              <select className="ctl" aria-label={L('lang_label')} value={lang} onChange={(e) => setLang(e.target.value)}>
                 <option value="es">ES</option><option value="en">EN</option>
               </select>
             </span>
-            <button className="ctl ctl-icon" onClick={() => setDark(!dark)} aria-label={dark ? L('theme_light') : L('theme_dark')}>
+            <button type="button" className="ctl ctl-icon" onClick={() => setDark(!dark)} aria-pressed={dark} aria-label={dark ? L('theme_light') : L('theme_dark')}>
               {dark ? <IconSunFilled size={16} /> : <IconMoonFilled size={15} />}
             </button>
           </div>
         </header>
-        <main className="content">{children}</main>
+        <main className="content" id="contenido" tabIndex={-1}>{children}</main>
       </div>
     </div>
   );

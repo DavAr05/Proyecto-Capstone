@@ -24,7 +24,7 @@ export function BenefitItemForm({ sponsor, benefit, index, ctx, busy, onClose, o
       description: form.description.trim() || null,
       icon: form.icon.trim() || null,
       costPlatinum: Number(form.costPlatinum || 0),
-      stock: Number(form.stock || 0),
+      stock: String(form.stock).trim() === '' ? null : Number(form.stock),
       expiresAt: form.noLimit ? null : (form.expiresAt || null),
     }, index);
   };
@@ -74,11 +74,11 @@ export function BenefitItemForm({ sponsor, benefit, index, ctx, busy, onClose, o
             onChange={(e) => set('costPlatinum')(e.target.value)}
           />
         </Field>
-        <Field label={isEn ? 'Available stock' : 'Stock disponible'}>
+        <Field label={isEn ? 'Available stock' : 'Stock disponible'} hint={isEn ? 'Leave empty for unlimited.' : 'Déjalo vacío para stock ilimitado.'}>
           <input
             type="number"
             min="0"
-            placeholder="0"
+            placeholder={isEn ? 'Unlimited' : 'Ilimitado'}
             value={form.stock}
             onKeyDown={(e) => ['e', 'E', '+', '-'].includes(e.key) && e.preventDefault()}
             onChange={(e) => set('stock')(e.target.value)}

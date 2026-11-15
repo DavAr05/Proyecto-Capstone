@@ -210,17 +210,17 @@ export default function Plans({ ctx }) {
                 </div>
                 <div className="limits">
                   <div className="section-label" style={{ margin: '0 0 2px' }}>{L('p_limits')}</div>
-                  <div className="limit-row"><label>{L('lim_qday')}</label><input type="number" min="0" value={p.limits.qDay} onChange={(e) => setLimit(p.id, 'qDay', e.target.value)} /></div>
-                  <div className="limit-row"><label>{L('lim_groups')}</label><input type="number" min="0" value={p.limits.groups} onChange={(e) => setLimit(p.id, 'groups', e.target.value)} /></div>
-                  <div className="limit-row"><label>{L('lim_tests')}</label><input type="number" min="0" value={p.limits.tests} onChange={(e) => setLimit(p.id, 'tests', e.target.value)} /></div>
+                  <div className="limit-row"><label>{L('lim_qday')}</label><input aria-label={`${L('lim_qday')} · ${p.name?.es || p.name || ''}`} type="number" min="0" value={p.limits.qDay} onChange={(e) => setLimit(p.id, 'qDay', e.target.value)} /></div>
+                  <div className="limit-row"><label>{L('lim_groups')}</label><input aria-label={`${L('lim_groups')} · ${p.name?.es || p.name || ''}`} type="number" min="0" value={p.limits.groups} onChange={(e) => setLimit(p.id, 'groups', e.target.value)} /></div>
+                  <div className="limit-row"><label>{L('lim_tests')}</label><input aria-label={`${L('lim_tests')} · ${p.name?.es || p.name || ''}`} type="number" min="0" value={p.limits.tests} onChange={(e) => setLimit(p.id, 'tests', e.target.value)} /></div>
                   <div className="note" style={{ marginTop: 8 }}>0 = {L('unlimited')}</div>
                 </div>
                 {/* Badges por acción (campo `badges` del modelo de planes). */}
                 <div className="limits">
                   <div className="section-label with-ico" style={{ margin: '0 0 2px' }}><IconMedal />{L('p_badges')}</div>
-                  <div className="limit-row"><label>{L('bdg_login')}</label><input type="number" min="0" value={p.badges?.login ?? 0} onChange={(e) => setBadge(p.id, 'login', e.target.value)} /></div>
-                  <div className="limit-row"><label>{L('bdg_purchase')}</label><input type="number" min="0" value={p.badges?.purchase ?? 0} onChange={(e) => setBadge(p.id, 'purchase', e.target.value)} /></div>
-                  <div className="limit-row"><label>{L('bdg_correct')}</label><input type="number" min="0" value={p.badges?.correct ?? 0} onChange={(e) => setBadge(p.id, 'correct', e.target.value)} /></div>
+                  <div className="limit-row"><label>{L('bdg_login')}</label><input aria-label={`${L('bdg_login')} · ${p.name?.es || p.name || ''}`} type="number" min="0" value={p.badges?.login ?? 0} onChange={(e) => setBadge(p.id, 'login', e.target.value)} /></div>
+                  <div className="limit-row"><label>{L('bdg_purchase')}</label><input aria-label={`${L('bdg_purchase')} · ${p.name?.es || p.name || ''}`} type="number" min="0" value={p.badges?.purchase ?? 0} onChange={(e) => setBadge(p.id, 'purchase', e.target.value)} /></div>
+                  <div className="limit-row"><label>{L('bdg_correct')}</label><input aria-label={`${L('bdg_correct')} · ${p.name?.es || p.name || ''}`} type="number" min="0" value={p.badges?.correct ?? 0} onChange={(e) => setBadge(p.id, 'correct', e.target.value)} /></div>
                   <div className="note" style={{ marginTop: 8 }}>{L('badges_unit')} / {lang === 'es' ? 'acción' : 'action'}</div>
                 </div>
                 <div style={{ padding: 12, borderTop: '1px solid var(--line)' }}>

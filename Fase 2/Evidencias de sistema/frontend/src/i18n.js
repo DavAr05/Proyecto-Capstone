@@ -161,7 +161,7 @@ export const T = {
     au_table:'Bitácora', au_date:'Fecha', au_actor:'Realizado por', au_action:'Acción', au_resource:'Recurso', au_detail:'Detalle',
     au_filter_action:'Acción', au_filter_resource:'Recurso (prefijo)', au_no_rows:'No hay registros con esos filtros.',
     // ── textos añadidos (revisión de i18n) ──
-    menu:'Menú',
+    menu:'Menú', skip_content:'Saltar al contenido', nav_main:'Navegación principal', lang_label:'Idioma',
     theme_light:'Modo claro',
     theme_dark:'Modo oscuro',
     theme_light_short:'Claro',
@@ -357,7 +357,7 @@ export const T = {
     au_table:'Audit log', au_date:'Date', au_actor:'Performed by', au_action:'Action', au_resource:'Resource', au_detail:'Detail',
     au_filter_action:'Action', au_filter_resource:'Resource (prefix)', au_no_rows:'No entries match those filters.',
     // ── added texts (i18n review) ──
-    menu:'Menu',
+    menu:'Menu', skip_content:'Skip to content', nav_main:'Main navigation', lang_label:'Language',
     theme_light:'Light mode',
     theme_dark:'Dark mode',
     theme_light_short:'Light',

@@ -245,7 +245,7 @@ export default function Sponsors({ ctx }) {
                           >
                             <div className="flex sponsors-layout-17" >
                               <span className="sponsors-layout-18" >{isOpen ? '▼' : '▶'}</span>
-                              <span className="sponsors-layout-19" >{sponsor.name}</span>
+                              <button type="button" className="link-reset sponsors-layout-19" aria-expanded={isOpen} onClick={(e) => { e.stopPropagation(); toggleAccordion(sponsor.id); }}>{sponsor.name}</button>
                               <TierBadge tier={sponsor.tier} />
                             </div>
 
@@ -294,7 +294,7 @@ export default function Sponsors({ ctx }) {
                                           <tr className="sponsors-layout-32" key={b.id || idx} style={{ "--sponsors-layout-32-opacity": isExpired ? 0.65 : 1 }}>
                                             <td className="cell-main"><b>{b.name}</b></td>
                                             <td className="sponsors-layout-33" data-label={isEn ? 'COST' : 'COSTO'}><IconDiamond size={13} /> {fmt(b.costPlatinum || 0)} {isEn ? 'plat.' : 'plat.'}</td>
-                                            <td data-label="STOCK">{fmt(b.stock || 0)} u.</td>
+                                            <td data-label="STOCK">{b.stock == null ? (isEn ? 'Unlimited' : 'Ilimitado') : `${fmt(b.stock)} u.`}</td>
                                             <td data-label={isEn ? 'REDEEMED' : 'CANJEADOS'}>{fmt(b.redeemedCount || 0)}</td>
                                             <td className="cell-full" data-label={isEn ? 'EXPIRATION' : 'FECHA LÍMITE'}>
                                               <DateBadge dateStr={b.expiresAt} isEn={isEn} />
@@ -306,7 +306,7 @@ export default function Sponsors({ ctx }) {
                                               >
                                                 <button
                                                   className="btn sec sm sponsors-layout-35"
-                                                  disabled={busy || b.stock <= 0 || isExpired}
+                                                  disabled={busy || (b.stock != null && b.stock <= 0) || isExpired}
                                                   onClick={() => redeem(sponsor, b)}
                                                   title={isExpired ? (isEn ? 'Expired benefit' : 'Beneficio expirado') : (isEn ? 'Redeem 1' : 'Canjear 1')}
                                                   

@@ -41,7 +41,7 @@ export default function Login({ ctx }) {
     <div className="login-wrap">
       <div className="card login-card">
         <div className="lg">
-          <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+          <svg width="30" height="30" viewBox="0 0 30 30" fill="none" aria-hidden="true" focusable="false">
             <polygon points="3,27 9,6 13,6 8,27" fill="var(--brand)" />
             <polygon points="27,27 21,6 17,6 22,27" fill="var(--brand)" />
             <rect x="7" y="14" width="16" height="4" rx="1" fill="var(--brand)" />
@@ -53,13 +53,14 @@ export default function Login({ ctx }) {
         <p className="sub" style={{ textAlign: 'center' }}>{L('login_title')}</p>
         <form onSubmit={submit}>
           <div className="field">
-            <label>{L('login_email')}</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+            <label htmlFor="login-email">{L('login_email')}</label>
+            <input id="login-email" type="email" name="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
           </div>
           <div className="field">
-            <label>{L('login_pass')}</label>
+            <label htmlFor="login-pass">{L('login_pass')}</label>
             <div className="pw-wrap">
               <input
+                id="login-pass" name="password" autoComplete="current-password" required
                 type={showPass ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -69,17 +70,17 @@ export default function Login({ ctx }) {
                 className="pw-toggle"
                 onClick={() => setShowPass((v) => !v)}
                 aria-label={showPass ? L('pw_hide') : L('pw_show')}
-                tabIndex={-1}
+                aria-pressed={showPass}
               >
                 {showPass ? <IconEyeOff size={16} /> : <IconEye size={16} />}
               </button>
             </div>
           </div>
           <div className="field">
-            <label>{L('login_otp')}</label>
-            <input value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" />
+            <label htmlFor="login-otp">{L('login_otp')}</label>
+            <input id="login-otp" name="otp" value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="000000" inputMode="numeric" autoComplete="one-time-code" maxLength={6} />
           </div>
-          {err && <div className="err">{err}</div>}
+          {err && <div className="err" role="alert">{err}</div>}
           <button className="btn" style={{ width: '100%', marginTop: 16 }} disabled={busy}>
             {busy ? '…' : L('login_btn')}
           </button>
