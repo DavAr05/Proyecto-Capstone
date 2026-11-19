@@ -8,6 +8,7 @@ import CorrectionDialog from './users/CorrectionDialog.jsx';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, qs } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
+import { useLiveRefresh } from '../components/LiveFeed.jsx';
 import { TopKpiCard, Loading, Tabs, Toast, useToast, IconUsers, IconCheckCircle, IconBan, IconTicket, IconFlag } from "../components/ui.jsx";
 
 export default function Users({ ctx }) {
@@ -91,6 +92,7 @@ export default function Users({ ctx }) {
   useEffect(() => { api.get('/agents').then((r) => setAgents(r.data)).catch(() => setAgents(null)); }, []);
   useEffect(() => { loadUserStats(); }, [loadUserStats]);
   useEffect(() => { loadTickets(); }, [loadTickets]);
+  useLiveRefresh(() => { loadTickets(); loadUserStats(); });
 
   useEffect(() => { setCursors([null]); setPage(0); loadUsers(uFilters, null); }, [uFilters, loadUsers]);
   // Se carga una sola vez (como loadTickets) y el filtro de estado (Pendientes/
@@ -251,10 +253,10 @@ export default function Users({ ctx }) {
   return (
     <>
       <div className="grid g4 u-kpis">
-        <TopKpiCard label={L('u_total')} value={fmt(uStats?.total ?? uTotal)} icon={IconUsers} tone="blue" />
-        <TopKpiCard label={L('u_active')} value={uStats ? fmt(uStats.active) : '…'} icon={IconCheckCircle} tone="blue" />
-        <TopKpiCard label={L('u_suspended')} value={uStats ? fmt(uStats.suspended) : '…'} icon={IconBan} tone="blue" />
-        <TopKpiCard label={L('u_tickets')} value={fmt(ticketCounts.open)} icon={IconTicket} tone="blue" />
+        <TopKpiCard label={L('u_total')} value={fmt(uStats?.total ?? uTotal)} icon={IconUsers} tone="blue" sub={lang === 'en' ? 'Registered accounts' : 'Cuentas registradas'} />
+        <TopKpiCard label={L('u_active')} value={uStats ? fmt(uStats.active) : '…'} icon={IconCheckCircle} tone="blue" sub={uStats?.total ? `${Math.round((uStats.active / uStats.total) * 100)}% ${lang === 'en' ? 'of total' : 'del total'}` : undefined} />
+        <TopKpiCard label={L('u_suspended')} value={uStats ? fmt(uStats.suspended) : '…'} icon={IconBan} tone="blue" sub={lang === 'en' ? 'Blocked from the app' : 'Bloqueados en la app'} />
+        <TopKpiCard label={L('u_tickets')} value={fmt(ticketCounts.open)} icon={IconTicket} tone="blue" sub={lang === 'en' ? 'Waiting for support' : 'Esperando a soporte'} />
       </div>
 
       <div className="users-layout-1" >

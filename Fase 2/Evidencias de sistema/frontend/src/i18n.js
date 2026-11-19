@@ -4,7 +4,7 @@ export const T = {
   es: {
     console:'Consola de negocio', role_admin:'Gerencia', role_finance:'Finanzas', role_ops:'Operaciones', role_support:'Soporte',
     nav_grp1:'Negocio', nav_grp2:'Plataforma',
-    nav_resumen:'Resumen', nav_comercial:'Comercial', nav_sponsors:'Sponsors', nav_operativa:'Operativa', nav_usuarios:'Usuarios y soporte', nav_tutores:'Tutores', nav_contenido:'Contenido', nav_planes:'Planes y productos', nav_auditoria:'Bitácora de auditoría',
+    nav_resumen:'Resumen', nav_comercial:'Comercial', nav_sponsors:'Sponsors', nav_suscripciones:'Suscripciones', nav_operativa:'Operativa', nav_usuarios:'Usuarios y soporte', nav_tutores:'Tutores', nav_contenido:'Contenido', nav_planes:'Planes y productos', nav_auditoria:'Bitácora de auditoría',
 
     // ── genéricos ──
     save:'Guardar', cancel:'Cancelar', close:'Cerrar', create:'Crear', edit:'Editar', del:'Eliminar', view:'Ver',
@@ -210,7 +210,7 @@ export const T = {
   en: {
     console:'Business console', role_admin:'Management', role_finance:'Finance', role_ops:'Operations', role_support:'Support',
     nav_grp1:'Business', nav_grp2:'Platform',
-    nav_resumen:'Overview', nav_comercial:'Commercial', nav_sponsors:'Sponsors', nav_operativa:'Operations', nav_usuarios:'Users & support', nav_tutores:'Tutors', nav_contenido:'Content', nav_planes:'Plans & products', nav_auditoria:'Audit log',
+    nav_resumen:'Overview', nav_comercial:'Commercial', nav_sponsors:'Sponsors', nav_suscripciones:'Subscriptions', nav_operativa:'Operations', nav_usuarios:'Users & support', nav_tutores:'Tutors', nav_contenido:'Content', nav_planes:'Plans & products', nav_auditoria:'Audit log',
 
     save:'Save', cancel:'Cancel', close:'Close', create:'Create', edit:'Edit', del:'Delete', view:'View',
     apply:'Apply', retry:'Retry', err_view_title:'This view could not be displayed', err_view_msg:'An unexpected error occurred while loading it. You can retry or go to another section.', clear_filters:'Clear filters', filter_all:'All', required_field:'Required field',

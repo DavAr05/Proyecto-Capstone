@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { api } from '../api/client.js';
+import { useLiveRefresh, LiveDelta, adj } from '../components/LiveFeed.jsx';
 import {
   KpiTrend, Card, Loading, ErrorBox, Tabs,
   LineChartInteractive, RankList, MiniMonthBars, Funnel, BarsInteractive, DonutMulti, CAT_COLORS,
@@ -80,6 +81,7 @@ export default function Commercial({ ctx }) {
     } catch (e) { setErr(e.message); }
   };
   useEffect(() => { load(range); }, [range]);
+  useLiveRefresh(() => load(range));
 
   const months = ov?.downloadsByMonth || [];
   const monthVals = useMemo(() => months.map((m) => m.value), [months]);
@@ -150,6 +152,31 @@ export default function Commercial({ ctx }) {
               </div>
             </Card>
 
+            {/* Negocio real de la plataforma (pagos, canjes y medallas de alumnos), ya sumado a las cifras de arriba */}
+            {d.real && (
+              <Card style={{ marginBottom: 14 }}>
+                <div className="flex between wrap" style={{ gap: 8 }}>
+                  <b>{isEn ? 'Live business (real activity)' : 'Negocio real (actividad en vivo)'}</b>
+                  <span className="note">{isEn ? 'Already included in the figures above' : 'Ya sumado a las cifras de arriba'}</span>
+                </div>
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 10 }}>
+                  {[
+                    [isEn ? 'Active subscriptions' : 'Suscripciones activas', fmt(d.real.activeSubs), d.real.canceling ? `${d.real.canceling} ${isEn ? 'canceling' : 'se cancelan'}` : null],
+                    [isEn ? 'Real recurring revenue' : 'Ingreso recurrente real', `$${fmt(d.real.mrr)}`, isEn ? 'per month' : 'por mes'],
+                    [isEn ? 'Charged in period' : 'Cobrado en el período', `$${fmt(d.real.collected)}`, d.real.collectedPrev ? `${isEn ? 'prev.' : 'ant.'} $${fmt(d.real.collectedPrev)}` : null],
+                    [isEn ? 'Benefits redeemed' : 'Canjes de beneficios', fmt(d.real.redemptions), d.real.redemptionsPrev ? `${isEn ? 'prev.' : 'ant.'} ${fmt(d.real.redemptionsPrev)}` : null],
+                    [isEn ? 'Medals earned' : 'Medallas ganadas', fmt(d.real.badges), null],
+                  ].map(([label, value, sub]) => (
+                    <div key={label} style={{ flex: '1 1 150px', padding: '10px 14px', borderRadius: 12, background: 'var(--soft)' }}>
+                      <div className="note">{label}</div>
+                      <b style={{ fontSize: 20 }}>{value}</b>
+                      {sub && <div className="note">{sub}</div>}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
             {/* Banner de tip insertado entre ambos bloques */}
             <div className="tip-banner commercial-layout-4" >
               <span className="ic"><IconLightbulb size={15} /></span>
@@ -167,7 +194,7 @@ export default function Commercial({ ctx }) {
                     baja en vez de alargada (ver .mrr-body en styles.css). */}
                 <div className="mrr-body">
                   <div className="mrr-text">
-                    <div className="mrr-val">${fmt(d.mrr)}</div>
+                    <div className="mrr-val">${fmt(adj('mrr', d.mrr))}<LiveDelta id="mrr" money value={d.mrr} /></div>
                     {ov.mrr?.deltaPct != null && (
                       <div className="dl up commercial-layout-6" >▲ {ov.mrr.deltaPct}% {L('vs_prev')}</div>
                     )}
@@ -201,7 +228,7 @@ export default function Commercial({ ctx }) {
             <KpiTrend label={L('k_mau')} value={fmt(d.mau)}
               delta={ov.mau?.deltaPct != null ? `${ov.mau.deltaPct}% ${L('vs_prev')}` : null}
               spark={monthVals} bigIcon={IconTrendingUp} tone="blue" />
-            <KpiTrend label={L('k_converted')} value={`${fmt(d.converted)} · ${d.convRate}%`}
+            <KpiTrend label={L('k_converted')} value={<>{`${fmt(adj('converted', d.converted))} · ${d.convRate}%`}<LiveDelta id="converted" value={d.converted} /></>}
               delta={`${d.convRate}% ${L('conv_of_mau')}`} spark={monthVals} bigIcon={IconStar} tone="blue" />
 
             <Card>
@@ -236,7 +263,7 @@ export default function Commercial({ ctx }) {
       {tab === 'conversion' && (
         <div className="tab-fade">
           <div className="grid g4">
-            <KpiTrend label={L('k_converted')} value={fmt(d.converted)}
+            <KpiTrend label={L('k_converted')} value={<>{fmt(adj('converted', d.converted))}<LiveDelta id="converted" value={d.converted} /></>}
               delta={`${d.convRate}% ${L('conv_of_mau')}`} spark={monthVals} bigIcon={IconStar} tone="blue" />
             <KpiTrend label={L('k_dau')} value={fmt(d.dau)} spark={monthVals} bigIcon={IconUsers} tone="blue" />
             <KpiTrend label={L('k_mau')} value={fmt(d.mau)}
@@ -291,11 +318,11 @@ export default function Commercial({ ctx }) {
       {tab === 'ingresos' && (
         <div className="tab-fade">
           <div className="grid g4">
-            <KpiTrend label={L('k_mrr')} value={`$${fmt(d.mrr)}`}
+            <KpiTrend label={L('k_mrr')} value={<>{`$${fmt(adj('mrr', d.mrr))}`}<LiveDelta id="mrr" money value={d.mrr} /></>}
               delta={ov.mrr?.deltaPct != null ? `${ov.mrr.deltaPct}% ${L('vs_prev')}` : null}
               spark={monthVals} bigIcon={IconWallet} tone="blue" />
             <KpiTrend label={L('k_benefits')} value={fmt(d.benefitsRedeemed)} spark={monthVals} bigIcon={IconGift} tone="blue" />
-            <KpiTrend label={L('k_converted')} value={`${fmt(d.converted)} · ${d.convRate}%`} spark={monthVals} bigIcon={IconStar} tone="blue" />
+            <KpiTrend label={L('k_converted')} value={<>{`${fmt(adj('converted', d.converted))} · ${d.convRate}%`}<LiveDelta id="converted" value={d.converted} /></>} spark={monthVals} bigIcon={IconStar} tone="blue" />
             <KpiTrend label={L('k_mau')} value={fmt(d.mau)} spark={monthVals} bigIcon={IconTrendingUp} tone="blue" />
           </div>
           <Card className="commercial-layout-14" >

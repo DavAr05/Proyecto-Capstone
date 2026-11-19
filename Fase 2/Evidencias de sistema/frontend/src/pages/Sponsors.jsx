@@ -12,6 +12,7 @@ import { DateBadge, checkExpired } from './sponsors/DateBadge.jsx';
 import { SponsorForm } from './sponsors/SponsorForm.jsx';
 import { BenefitItemForm } from './sponsors/BenefitItemForm.jsx';
 import { RedeemBenefitForm } from './sponsors/RedeemBenefitForm.jsx';
+import { useLiveRefresh } from '../components/LiveFeed.jsx';
 
 // ── Tarjeta KPI: fondo predominantemente blanco con degradado suave del color de
 // la métrica (mismo espíritu que el banner de arriba) y un ícono gigante detrás,
@@ -51,6 +52,7 @@ export default function Sponsors({ ctx }) {
     try { setRows((await api.get('/sponsors')).data); } catch (e) { setErr(e.message); }
   };
   useEffect(() => { load(); }, []);
+  useLiveRefresh(load);
 
   const run = async (fn, okMsg) => {
     setBusy(true);
@@ -367,26 +369,6 @@ export default function Sponsors({ ctx }) {
             </div>
           </Card>
 
-          {/* Mensaje motivacional */}
-          <Card className="sponsors-layout-40"
-            
-          >
-            <div className="sponsors-layout-41" >
-              <div className="sponsors-layout-42"
-                
-              >
-                <IconMegaphone size={24} />
-              </div>
-              <p className="sponsors-layout-43" >
-                {isEn
-                  ? 'Sponsors make it possible for more students to access great opportunities.'
-                  : 'Los sponsors hacen posible que más estudiantes accedan a grandes oportunidades.'}
-              </p>
-            </div>
-            <div className="sponsors-layout-44" >
-              ”
-            </div>
-          </Card>
         </div>
 
       </div>

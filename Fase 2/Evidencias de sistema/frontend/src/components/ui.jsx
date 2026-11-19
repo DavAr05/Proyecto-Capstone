@@ -31,17 +31,26 @@ export function Sparkline({ color = 'currentColor', width = 70, height = 22 }) {
 // fondo, en vez de un emoji + color sólido. Mismo tratamiento visual que las
 // tarjetas de Resumen/Comercial/Sponsors — úsala en cualquier vista nueva
 // para mantener consistencia.
-export function TopKpiCard({ label, value, delta, icon: IconComponent, tone }) {
+// Tarjeta KPI única del panel (mismo estilo de Sponsors): icono grande translúcido a la derecha,
+// etiqueta, valor y variación o detalle debajo.
+export function KpiTile({ label, value, delta, sub, icon: IconComponent, tone = 'blue', spark }) {
   return (
     <div className={`kpi-tile ${tone}`}>
-      <div className="kpi-ic"><IconComponent size={95} /></div>
-      <div style={{ position: 'relative', zIndex: 1 }}>
+      <div className="kpi-ic"><IconComponent size={115} /></div>
+      <div>
         <div className="kpi-label">{label}</div>
         <div className="kpi-val">{value}</div>
-        {delta && <div className="kpi-delta up">▲ {delta}</div>}
       </div>
+      {spark}
+      {delta
+        ? <div className="kpi-delta up">▲ {delta}</div>
+        : sub && <div className="kpi-delta sub">{sub}</div>}
     </div>
   );
+}
+
+export function TopKpiCard({ label, value, delta, sub, icon: IconComponent, tone }) {
+  return <KpiTile label={label} value={value} delta={delta} sub={sub} icon={IconComponent} tone={tone || 'blue'} />;
 }
 
 export function Card({ children, className = '', style }) {
@@ -71,21 +80,12 @@ export function KpiTrend({ ic, label, value, delta, up = true, spark = [], bigIc
 
   if (tinted) {
     return (
-      <div className={`card kpi-trend tint ${tone}`}>
-        <div className="kt-bigic"><BigIcon size={92} /></div>
-        <div className="kt-txt">
-          <div className="lbl">{label}</div>
-          <div className="kpi-val">{value}</div>
-          {delta && <div className={`dl ${up ? 'up' : 'dn'}`}>{up ? '▲' : '▼'} {delta}</div>}
-        </div>
-        {path && (
-          <div className="kt-spark">
-            <svg width="100%" height="22" viewBox="0 0 100 22" preserveAspectRatio="none">
-              <path d={path} fill="none" stroke={`var(--kpi-${tone}-icon)`} strokeWidth="1.6" opacity=".55" />
-            </svg>
-          </div>
-        )}
-      </div>
+      <KpiTile label={label} value={value} delta={delta} tone={tone} icon={BigIcon}
+        spark={path ? (
+          <svg className="kpi-spk" width="100%" height="22" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true">
+            <path d={path} fill="none" stroke={`var(--kpi-${tone}-icon)`} strokeWidth="1.6" opacity=".55" />
+          </svg>
+        ) : null} />
     );
   }
 
@@ -672,8 +672,24 @@ function compactNum(v) {
 // gráfico "de verdad" en vez de una silueta sin escala.
 export function LineChartInteractive({ vals = [], labels = [], format }) {
   const [hover, setHover] = useState(null);
+  const gid = 'lc' + useId().replace(/[^a-zA-Z0-9]/g, '');
+  // El ancho real de la tarjeta se mide con ResizeObserver: así el viewBox
+  // coincide con el ancho en píxeles y el gráfico ocupa todo el panel sin
+  // dejar franjas vacías a los lados (preserveAspectRatio recortaba el trazo).
+  const wrapRef = useRef(null);
+  const [w, setW] = useState(600);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver((entries) => {
+      const next = Math.round(entries[0].contentRect.width);
+      if (next > 0) setW(Math.max(280, next));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const path = useMemo(() => {
-    const w = 600, h = 220, padL = 40, padR = 12, padT = 12, padB = 28;
+    const h = 220, padL = 40, padR = 12, padT = 12, padB = 28;
     if (vals.length < 2) return { empty: true, w, h };
     const rawMax = Math.max(...vals, 0);
     const { niceMax, values: yValues } = niceAxis(rawMax, 4);
@@ -685,34 +701,46 @@ export function LineChartInteractive({ vals = [], labels = [], format }) {
     const area = d + ` L${pts[pts.length - 1][0].toFixed(1)} ${h - padB} L${padL} ${h - padB} Z`;
     const yTicks = yValues.map((v) => ({ v, y: h - padB - (v / niceMax) * innerH }));
     return { d, area, pts, w, h, padL, padR, padT, padB, step, yTicks };
-  }, [vals]);
-  if (path.empty) return <svg viewBox={`0 0 ${path.w} ${path.h}`} width="100%" height={path.h} />;
-  const { d, area, pts, w, h, padL, padR, padT, padB, step, yTicks } = path;
+  }, [vals, w]);
+  if (path.empty) {
+    return (
+      <div ref={wrapRef}>
+        <svg viewBox={`0 0 ${path.w} ${path.h}`} width="100%" height={path.h} />
+      </div>
+    );
+  }
+  const { d, area, pts, w: cw, h, padL, padR, padT, padB, step, yTicks } = path;
   const hv = hover != null ? { x: pts[hover][0], y: pts[hover][1], val: vals[hover], lab: labels[hover] } : null;
   return (
-    <div style={{ position: 'relative' }}>
-      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} onMouseLeave={() => setHover(null)}>
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <svg viewBox={`0 0 ${cw} ${h}`} width="100%" height={h} onMouseLeave={() => setHover(null)}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity=".28" />
+            <stop offset="100%" stopColor="#3b82f6" stopOpacity=".04" />
+          </linearGradient>
+        </defs>
         {yTicks.map((t, i) => (
           <g key={i}>
-            <line x1={padL} y1={t.y.toFixed(1)} x2={(w - padR).toFixed(1)} y2={t.y.toFixed(1)}
-              stroke="var(--line)" strokeWidth="1" strokeDasharray={i === 0 ? '0' : '3 5'} opacity={i === 0 ? 1 : 0.6} />
-            <text x={padL - 6} y={(t.y + 3).toFixed(1)} fontSize="9" fill="var(--muted)" textAnchor="end" fontFamily="Inter">{compactNum(t.v)}</text>
+            <line x1={padL} y1={t.y.toFixed(1)} x2={(cw - padR).toFixed(1)} y2={t.y.toFixed(1)}
+              stroke="var(--line)" strokeWidth="1" />
+            <text x={padL - 6} y={(t.y + 3).toFixed(1)} fontSize="9.5" fill="#94a3b8" textAnchor="end" fontFamily="Inter">{compactNum(t.v)}</text>
           </g>
         ))}
-        <path d={area} fill="var(--brand)" opacity=".12" />
-        <path d={d} fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinejoin="round" />
-        {hv && <line x1={hv.x.toFixed(1)} y1={padT} x2={hv.x.toFixed(1)} y2={(h - padB).toFixed(1)} stroke="var(--line)" strokeDasharray="3 3" />}
+        <path d={area} fill={`url(#${gid})`} />
+        <path d={d} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinejoin="round" />
+        {hv && <line x1={hv.x.toFixed(1)} y1={padT} x2={hv.x.toFixed(1)} y2={(h - padB).toFixed(1)} stroke="#c9d8ea" strokeDasharray="3 3" />}
         {pts.map((p, i) => (
           <g key={i}>
-            <circle cx={p[0].toFixed(1)} cy={p[1].toFixed(1)} r={hover === i ? 4.5 : 2.5} fill="var(--brand)" style={{ transition: 'r .1s' }} />
+            <circle cx={p[0].toFixed(1)} cy={p[1].toFixed(1)} r={hover === i ? 4.5 : 3} fill="#2563eb" style={{ transition: 'r .1s' }} />
             <rect x={(p[0] - step / 2).toFixed(1)} y={padT} width={step.toFixed(1)} height={(h - padT - padB).toFixed(1)} fill="transparent"
               style={{ cursor: 'pointer' }} onMouseEnter={() => setHover(i)} />
           </g>
         ))}
-        {labels.map((l, i) => <text key={i} x={(padL + i * step).toFixed(1)} y={h - 8} fontSize="9.5" fill="var(--muted)" textAnchor="middle" fontFamily="Inter">{l}</text>)}
+        {labels.map((l, i) => <text key={i} x={(padL + i * step).toFixed(1)} y={h - 8} fontSize="10" fill="#94a3b8" textAnchor="middle" fontFamily="Inter">{l}</text>)}
       </svg>
       {hv && (
-        <div className="line-tip" style={{ left: `${(hv.x / w) * 100}%`, top: `${(hv.y / h) * 100}%` }}>
+        <div className="line-tip" style={{ left: `${(hv.x / cw) * 100}%`, top: `${(hv.y / h) * 100}%` }}>
           <b>{hv.lab}</b>
           <span>{format ? format(hv.val) : hv.val}</span>
         </div>
@@ -755,11 +783,14 @@ export function RankList({ data = [], onSeeAll, seeAllLabel }) {
 export function Funnel({ data = [], format }) {
   const [hover, setHover] = useState(null);
   const max = data[0]?.value || 1;
+  const colors = ['#1e3a8a', '#3b82f6', '#7db9f2'];
+  const decimal = typeof document !== 'undefined' && document.documentElement.lang === 'en' ? '.' : ',';
   return (
     <div className="funnel-list">
       {data.map((d, i) => {
         const pct = max ? (d.value / max) * 100 : 0;
         const active = hover === i;
+        const pctText = pct >= 99.95 ? '100%' : `${pct.toFixed(1).replace('.', decimal)}%`;
         return (
           <div
             key={i}
@@ -769,13 +800,13 @@ export function Funnel({ data = [], format }) {
           >
             <div className="fr-top">
               <span className="fr-name">{i + 1}. {d.label}</span>
-              <span className="fr-val">
-                <b>{format ? format(d.value) : d.value}</b>
-                {i > 0 && <span className="fr-pct">{pct.toFixed(0)}%</span>}
-              </span>
+              <span className="fr-val">{format ? format(d.value) : d.value}</span>
             </div>
-            <div className="fr-track">
-              <i style={{ width: `${Math.max(pct, 4)}%`, opacity: (1 - i * 0.22).toFixed(2) }} />
+            <div className="fr-bar-row">
+              <div className="fr-track">
+                <i style={{ width: `${Math.max(pct, 4)}%`, background: colors[i % colors.length] }} />
+              </div>
+              <span className="fr-pct">{pctText}</span>
             </div>
           </div>
         );

@@ -4,10 +4,12 @@ import { useAuth } from './auth/AuthContext.jsx';
 import { makeL, fmt } from './i18n.js';
 import Layout from './components/Layout.jsx';
 import ErrorBoundary from './components/ErrorBoundary.jsx';
+import LiveFeed from './components/LiveFeed.jsx';
 import Login from './pages/Login.jsx';
 import Overview from './pages/Overview.jsx';
 import Commercial from './pages/Commercial.jsx';
 import Sponsors from './pages/Sponsors.jsx';
+import Subscriptions from './pages/Subscriptions.jsx';
 import Operations from './pages/Operations.jsx';
 import Users from './pages/Users.jsx';
 import Tutors from './pages/Tutors.jsx';
@@ -16,7 +18,7 @@ import Plans from './pages/Plans.jsx';
 import Audit from './pages/Audit.jsx';
 import {
   IconDashboard, IconDollarSign, IconMegaphone, IconTool, IconUsersFilled,
-  IconGraduationCap, IconBook, IconPuzzle, IconClipboardList,
+  IconGraduationCap, IconBook, IconPuzzle, IconClipboardList, IconWallet,
 } from './components/ui.jsx';
 
 // Definición de las vistas: ruta, etiqueta, icono y roles que pueden verlas.
@@ -29,6 +31,7 @@ export const VIEWS = [
   { id: 'resumen', path: '/', ic: IconDashboard, group: 1, roles: ['admin', 'finance', 'ops', 'support'], el: Overview },
   { id: 'comercial', path: '/comercial', ic: IconDollarSign, group: 1, roles: ['finance'], el: Commercial },
   { id: 'sponsors', path: '/sponsors', ic: IconMegaphone, group: 1, roles: ['finance'], el: Sponsors },
+  { id: 'suscripciones', path: '/suscripciones', ic: IconWallet, group: 1, roles: ['finance'], el: Subscriptions },
   { id: 'operativa', path: '/operativa', ic: IconTool, group: 2, roles: ['ops'], el: Operations },
   { id: 'usuarios', path: '/usuarios', ic: IconUsersFilled, group: 2, roles: ['support'], el: Users },
   { id: 'tutores', path: '/tutores', ic: IconGraduationCap, group: 2, roles: ['support'], el: Tutors },
@@ -63,14 +66,17 @@ export default function App() {
   if (!user) return <Login ctx={ctx} />;
 
   return (
-    <Layout ctx={ctx}>
-      <Routes>
-        {VIEWS.map((v) => (
-          <Route key={v.id} path={v.path} element={<Guard view={v} ctx={ctx} />} />
-        ))}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Layout>
+    <>
+      <Layout ctx={ctx}>
+        <Routes>
+          {VIEWS.map((v) => (
+            <Route key={v.id} path={v.path} element={<Guard view={v} ctx={ctx} />} />
+          ))}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Layout>
+      <LiveFeed lang={lang} />
+    </>
   );
 }
 
