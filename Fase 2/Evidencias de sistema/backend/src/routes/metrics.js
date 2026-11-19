@@ -5,6 +5,7 @@ import { requireRole } from '../middleware/auth.js';
 import { COL, getDoc, listAll, db } from '../data/repo.js';
 import { todayInSantiago, addDays, addMonths } from '../lib/syntheticMetrics.js';
 import { logAudit } from '../lib/audit.js';
+import { realSnapshot, overlayOverview, overlayCommercial } from '../lib/liveBusiness.js';
 
 const r = Router();
 
@@ -83,6 +84,28 @@ async function loadWindow(range) {
   return { unit, cur: cur.sort(byKey), prev: prev.sort(byKey) };
 }
 
+// Inicio (ISO) de la ventana actual y de la anterior, para medir lo REAL de la plataforma en el mismo período.
+const startIso = (unit, row) => (row ? (unit === 'day' ? `${row.date}T00:00:00.000Z` : `${row.month}-01T00:00:00.000Z`) : null);
+function winOf(w) {
+  const curStart = startIso(w.unit, w.cur[0]);
+  return { curStart, prevStart: startIso(w.unit, w.prev[0]) || curStart };
+}
+
+// Lo real (pagos, canjes, medallas) se recalcula cada pocos segundos, SIN el caché de 60 s de la base sintética,
+// para que un pago nuevo aparezca casi al instante en Resumen y Comercial.
+const realCache = new Map();
+async function withReal(composed, overlay) {
+  try {
+    const key = `${composed.win.curStart}|${composed.win.prevStart}`;
+    let hit = realCache.get(key);
+    if (!hit || Date.now() - hit.at > 3000) { hit = { at: Date.now(), value: await realSnapshot(composed.win) }; realCache.set(key, hit); }
+    return overlay(composed.data, composed.base, hit.value);
+  } catch (e) {
+    console.warn('[metrics] no se pudo sumar el negocio real:', e.message);
+    return composed.data;
+  }
+}
+
 const sumBy = (rows, f) => rows.reduce((s, x) => s + (f(x) || 0), 0);
 const dauOf = (row) => (row ? (row.dauAvg ?? row.dau ?? 0) : 0);
 
@@ -140,6 +163,8 @@ async function composeOverview(range) {
       systemHealth: health,
     },
     source: w.cur.some((x) => x.synthetic) ? 'synthetic' : 'aggregated',
+    win: winOf(w),
+    base: { mrr: l.mrr || 0, mrrPrev: pl?.mrr || 0, mau: l.mau || 0, converted: l.convertedToDate || 0 },
   };
 }
 
@@ -166,6 +191,8 @@ async function composeCommercial(range) {
       badgesByType: TIERS.map((tier) => ({ tier, value: c.badges[tier] })),
     },
     source: w.cur.some((x) => x.synthetic) ? 'synthetic' : 'aggregated',
+    win: winOf(w),
+    base: { mrr: l.mrr || 0, mrrPrev: 0, mau: l.mau || 0, converted: l.convertedToDate || 0 },
   };
 }
 
@@ -184,7 +211,10 @@ async function cached(key, fn) {
 r.get('/metrics/overview', requireRole('finance', 'ops', 'support'), wrap(async (req, res) => {
   const range = rangeFromQuery(req.query.range);
   const composed = await cached(`overview:${range}`, () => composeOverview(range));
-  if (composed) return ok(res, composed.data, 200, { range, source: composed.source });
+  if (composed) {
+    const data = await withReal(composed, overlayOverview);
+    return ok(res, data, 200, { range, source: composed.source, real: !!data.real });
+  }
   // Respaldo: metricsDaily/metricsMonthly aún no existen en esta base.
   const doc = await getDoc(COL.metrics, 'overview');
   const scaled = doc ? scaleOverview(doc, RANGE_FACTORS[range]) : {};
@@ -215,7 +245,7 @@ r.get('/metrics/commercial', requireRole('finance'), wrap(async (req, res) => {
   const range = rangeFromQuery(req.query.range);
   const composed = await cached(`commercial:${range}`, () => composeCommercial(range));
   let data; let source;
-  if (composed) ({ data, source } = composed);
+  if (composed) { data = await withReal(composed, overlayCommercial); source = composed.source; }
   else {
     const doc = await getDoc(COL.metrics, 'commercial');
     data = doc ? scaleCommercial(doc, RANGE_FACTORS[range]) : {};

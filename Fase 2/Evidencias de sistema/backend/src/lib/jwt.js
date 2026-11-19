@@ -4,6 +4,11 @@ import { randomUUID } from 'node:crypto';
 // Identificador único de cada refresh token (para rotación).
 export const newJti = () => randomUUID();
 
+// En Vercel (producción) es OBLIGATORIO definir JWT_SECRET: con la clave de desarrollo cualquiera
+// podría fabricar sesiones. En local sigue funcionando sin configurar nada.
+if (process.env.VERCEL && !process.env.JWT_SECRET) {
+  throw new Error('Falta la variable de entorno JWT_SECRET en Vercel (Settings → Environment Variables).');
+}
 const SECRET = process.env.JWT_SECRET || 'dev-secret';
 const ACCESS_TTL = Number(process.env.JWT_ACCESS_TTL || 900);
 
@@ -34,6 +39,16 @@ export function signRefresh(user, sessionId, jti) {
     },
     SECRET,
     { expiresIn: REFRESH_TTL, ...(jti ? { jwtid: jti } : {}) }
+  );
+}
+
+// Token de la app del alumno (módulo de demostración). typ 'student' lo hace
+// inservible en la consola: authRequired exige typ 'access'.
+export function signStudent(user) {
+  return jwt.sign(
+    { sub: user.id, name: user.name, typ: 'student' },
+    SECRET,
+    { expiresIn: Number(process.env.STUDENT_TOKEN_TTL || 43200) }
   );
 }
 

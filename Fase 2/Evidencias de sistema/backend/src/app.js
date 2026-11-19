@@ -14,6 +14,9 @@ import questionsRoutes from './routes/questions.js';
 import plansRoutes from './routes/plans.js';
 import tutorsRoutes from './routes/tutors.js';
 import auditRoutes from './routes/audit.js';
+import studentRoutes from './routes/student.js';
+import liveRoutes from './routes/live.js';
+import subscriptionsRoutes from './routes/subscriptions.js';
 
 // App de Express, sin `listen`: la usa tanto `index.js` (desarrollo local)
 // como `api/index.js` (función serverless de Vercel en producción).
@@ -26,6 +29,9 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', service: 'aprueba-adm
 
 // Rutas públicas de auth de la consola: /api/v1/admin/auth/*
 app.use('/api/v1/admin', authRoutes);
+
+// App del alumno (demo): /api/v1/student/* con su propio token (typ 'student').
+app.use('/api/v1/student', studentRoutes);
 
 // A partir de aquí, todo /admin exige token administrativo.
 const admin = express.Router();
@@ -40,6 +46,8 @@ admin.use(questionsRoutes);
 admin.use(plansRoutes);
 admin.use(tutorsRoutes);
 admin.use(auditRoutes);
+admin.use(liveRoutes);
+admin.use(subscriptionsRoutes);
 app.use('/api/v1/admin', admin);
 
 app.use(notFound);

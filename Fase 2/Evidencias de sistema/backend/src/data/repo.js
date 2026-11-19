@@ -38,6 +38,11 @@ export const COL = {
   metricsMonthly: 'metricsMonthly',
   auditLog: 'auditLog', // bitácora de acciones administrativas sensibles
   // Marketplace de tutores (lo consume en modo lectura el API del alumno).
+  // Suscripciones de alumnos (Stripe real en modo prueba o simulado), su historial de
+  // cobros y las sesiones de pago (checkout) en curso.
+  subscriptions: 'subscriptions',
+  payments: 'payments',
+  checkoutSessions: 'checkoutSessions',
   tutors: 'tutors',
   tutorReviews: 'tutorReviews',
   tutorRequests: 'tutorRequests',
